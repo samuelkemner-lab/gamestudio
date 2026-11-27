@@ -88,6 +88,11 @@ func show_summary(s: Dictionary) -> void:
 	col.add_child(rewards)
 	if int(s.tip) > 0:
 		col.add_child(UIKit.label("incl. €%d tip" % s.tip, 14, UIKit.DIM))
+	if not s.stormed_out:
+		if s.get("song", false):
+			col.add_child(UIKit.label("FULL SONG ARRANGEMENT  ·  ×1.5 streams tonight", 15, UIKit.CYAN))
+		else:
+			col.add_child(UIKit.wrap_label("Just a loop. Arrange 4+ bars with 2+ patterns in the Playlist before FINISH for ×1.5 streams.", 14, UIKit.DIM, 540))
 
 	var btn := UIKit.button("CONTINUE", UIKit.ACCENT, 18)
 	btn.pressed.connect(func():

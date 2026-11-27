@@ -3,7 +3,7 @@ extends Node3D
 ## Title screen → bedroom studio → phone DMs → rapper session in the booth → rating & payout.
 
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
-const VERSION := "v0.5 prototype"
+const VERSION := "v0.6 prototype"
 const DAWN := 30 * 60  # 06:00 the next morning
 const BOOTH_LOOK := Vector3(1.45, 1.2, -1.6)
 
@@ -201,6 +201,15 @@ func _input(event: InputEvent) -> void:
 				sequencer.save_snapshot()
 				loopr.refresh_grid()
 				show_toast("Project saved.")
+				get_viewport().set_input_as_handled()
+		KEY_Z:
+			if loopr.visible and event.ctrl_pressed:
+				if sequencer.undo():
+					show_toast("Undo.")
+				get_viewport().set_input_as_handled()
+		KEY_1, KEY_2, KEY_3, KEY_4:
+			if loopr.visible and not event.ctrl_pressed:
+				sequencer.select_pattern(event.physical_keycode - KEY_1)
 				get_viewport().set_input_as_handled()
 		KEY_TAB:
 			if not loopr.visible and not results.visible:

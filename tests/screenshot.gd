@@ -38,6 +38,7 @@ func _run() -> void:
 		await process_frame
 	if only.size() == 0 or only.has("menu"):
 		await _save(out + "/shot_menu.png")
+	main.chaos.crashes_enabled = false
 	main.start_game()
 	main.sequencer.play()
 	for i in 10:
@@ -178,6 +179,67 @@ func _run() -> void:
 		await _save(out + "/shot_night.png")
 		main.results.visible = false
 		main._set_ui_mode(false)
+
+	if want.call("daw"):
+		var sq: Sequencer = main.sequencer
+		sq.stop()
+		sq.select_pattern(0)
+		sq.clear()
+		sq.bpm = 142
+		for st in [0, 10]:
+			sq.set_step(0, st, true)
+		sq.set_step(1, 8, true)
+		for st in range(0, 16, 2):
+			sq.set_step(2, st, true)
+		sq.set_velocity(2, 2, 0.45)
+		sq.set_velocity(2, 6, 0.55)
+		sq.set_roll(2, 7, 3)
+		sq.set_roll(2, 14, 4)
+		sq.set_roll(2, 15, 2)
+		sq.set_velocity(1, 13, 0.3)
+		for b in [[0, 0], [3, 3], [6, 7], [10, 5], [13, 3]]:
+			sq.set_bass(b[0], b[1], true)
+		sq.set_glide(true)
+		for n in [[0, 7], [0, 3], [4, 8], [8, 10], [8, 3], [12, 7]]:
+			sq.set_note(n[0], n[1], true)
+		sq.set_swing(0.12)
+		sq.clone_to_next()
+		sq.set_roll(2, 4, 3)
+		sq.set_step(3, 8, true)
+		sq.select_pattern(0)
+		for b in [[0, 0], [1, 0], [2, 1], [3, 1], [4, 0], [5, 1]]:
+			sq.set_bar(b[0], b[1])
+		sq.set_reverb(AudioServer.get_bus_index("Keys"), 0.35)
+		sq.set_volume(sq.bus_index(0), 0.7)
+		sq.set_pan(sq.bus_index(2), 0.3)
+		sq.set_locut(sq.bus_index(2), true)
+		main.open_loopr()
+		main.loopr.set_tool("vel")
+		sq.play()
+		for i in 20:
+			await process_frame
+		var tabs3: TabContainer = main.loopr.tabs
+		await _save(out + "/shot_daw_rack.png")
+		main.loopr.set_tool("draw")
+		tabs3.current_tab = 1
+		main.loopr.set_lane("808")
+		for i in 4:
+			await process_frame
+		await _save(out + "/shot_daw_808.png")
+		main.loopr.set_lane("melody")
+		tabs3.current_tab = 2
+		sq.set_song_mode(true)
+		for i in 10:
+			await process_frame
+		await _save(out + "/shot_daw_playlist.png")
+		sq.set_song_mode(false)
+		tabs3.current_tab = 3
+		for i in 6:
+			await process_frame
+		await _save(out + "/shot_daw_mixer.png")
+		sq.stop()
+		tabs3.current_tab = 0
+		main.close_loopr()
 
 	if only.size() == 0 or only.has("loopr"):
 		main.open_loopr()

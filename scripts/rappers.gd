@@ -3,7 +3,8 @@ extends RefCounted
 ## The rappers that can book a session. Pure data: looks, voice, taste, patience, lines.
 ## wants[track] = [min_hits, max_hits] in the 16-step pattern.
 ## signature = steps that must be hit on a track (the groove they recognise).
-## mix[track] = "loud" | "quiet" | "off".
+## mix[track or "Keys"] = "loud" | "quiet" | "off" | "wet" (reverb) | "dry".
+## feel = how it should groove: swing range, ghost notes, hi-hat rolls, moving 808, 808 glide.
 
 const BIG_EARL := {
 	"id": "big_earl",
@@ -23,9 +24,10 @@ const BIG_EARL := {
 	"signature": {"Snare": [4, 12]},
 	"melody": {"notes": [0, 10], "scale": [], "instrument": "keys"},
 	"kit": "dusty",
-	"mix": {"Kick": "loud", "Snare": "loud", "808": "off"},
-	"brief_easy": "Wants 84–96 BPM, snare on steps 5 and 13, no 808, kick and snare loud. Melody optional (keys). Dusty kit = bonus.",
-	"brief_pro": "\"Real hip hop, young blood. Slow it down, let that snare crack. Keep that 808 nonsense away from me.\"",
+	"mix": {"Kick": "loud", "Snare": ["loud", "dry"], "808": "off"},
+	"feel": {"swing": [0.15, 0.45], "ghost": {"Snare": 1}},
+	"brief_easy": "Wants 84–96 BPM, snare on steps 5 and 13, no 808, kick and snare loud and dry (no reverb). Swing 15–45% and a soft ghost snare. Melody optional (keys). Dusty kit = bonus.",
+	"brief_pro": "\"Real hip hop, young blood. Slow it down, let it swing, let that snare crack. Keep that 808 nonsense away from me.\"",
 	"dm": "yo. heard u got a studio. i got 16 bars about the old days. no trap stuff pls",
 	"lines": {
 		"hello": "Bedroom studio, huh? ...Respect. Let's see what you got.",
@@ -57,8 +59,9 @@ const LIL_TEAR := {
 	"signature": {"Clap": [12]},
 	"melody": {"notes": [4, 14], "scale": "minor", "instrument": "pad"},
 	"kit": "default",
-	"mix": {"808": "loud", "Hi-hat": "quiet"},
-	"brief_easy": "Wants 125–145 BPM, clap on step 13, soft hats, 2–4 loud 808s, and a sad melody (4+ notes, C minor). Pad sound = bonus.",
+	"mix": {"808": "loud", "Hi-hat": "quiet", "Keys": "wet"},
+	"feel": {"rolls": {"Hi-hat": 1}, "bass_notes": 2},
+	"brief_easy": "Wants 125–145 BPM, clap on step 13, soft hats with a roll, 2–4 loud 808s on 2+ different notes, and a sad melody (4+ notes, C minor) drenched in reverb. Pad sound = bonus.",
 	"brief_pro": "\"I want it to sound like crying in the rain but like... in a cool way? Big 808. Soft hats.\"",
 	"dm": "heyyy i just got dumped and i need to make a song about it tonight. sad beat pls :(",
 	"lines": {
@@ -92,7 +95,8 @@ const GHOST := {
 	"melody": {"notes": [3, 10], "scale": "minor", "instrument": "bell"},
 	"kit": "drill",
 	"mix": {"808": "loud", "Kick": "quiet"},
-	"brief_easy": "Wants 138–146 BPM, ONE snare on step 9, 9+ hats, 3–6 loud 808s, quiet kick, dark melody (3–10 notes, C minor). Bell + drill kit = bonus.",
+	"feel": {"rolls": {"Hi-hat": 2}, "bass_notes": 3, "glide": true},
+	"brief_easy": "Wants 138–146 BPM, ONE snare on step 9, 9+ hats with 2+ rolls, 3–6 loud SLIDING 808s (glide on, 3+ notes), quiet kick, dark melody (3–10 notes, C minor). Bell + drill kit = bonus.",
 	"brief_pro": "\"Make it cold. Sliding 808s, hats going crazy. Don't waste my time, bro.\"",
 	"dm": "wagwan. heard ur beats are tapped. i got bars. dont waste my time",
 	"lines": {
@@ -127,7 +131,8 @@ const SPIKE := {
 	"melody": {"notes": [6, 16], "scale": [], "instrument": "pluck"},
 	"kit": "drill",
 	"mix": {"808": "loud", "Kick": "loud", "Clap": "loud"},
-	"brief_easy": "Wants 150–170 BPM, kick on step 1, claps on 5 and 13, lots of drums, LOUD 808/kick/clap, busy pluck melody (6+ notes).",
+	"feel": {"rolls": {"Hi-hat": 2}, "bass_notes": 2, "glide": true},
+	"brief_easy": "Wants 150–170 BPM, kick on step 1, claps on 5 and 13, lots of drums with hi-hat rolls, LOUD 808/kick/clap (but don't clip!), gliding 808 on 2+ notes, busy pluck melody (6+ notes).",
 	"brief_pro": "\"I wanna break my speakers. FAST. LOUD. Make the plucks go crazy.\"",
 	"dm": "yo i do rage music. need smth that makes the crowd go insane. u ready??",
 	"lines": {

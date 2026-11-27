@@ -1,4 +1,4 @@
-# Studio Grind (prototype v0.5)
+# Studio Grind (prototype v0.6)
 
 Een studio-producer-sim: je begint als wannabe SoundCloud-producer in je slaapkamer en bouwt beats in **LOOPR**.
 
@@ -15,6 +15,8 @@ Een studio-producer-sim: je begint als wannabe SoundCloud-producer in je slaapka
 | E | Interactie: monitor = LOOPR, microfoon = praat met de rapper, bed = slapen (nacht afsluiten) |
 | TAB | Telefoon: DM's (boeken), Shop, Tracks (streams), hints Easy/Pro |
 | Ctrl+S | Project opslaan in LOOPR (beschermt tegen een pc-crash) |
+| Ctrl+Z | Ongedaan maken in LOOPR |
+| 1–4 | Pattern A–D kiezen in LOOPR |
 | SPATIE | Beat afspelen/stoppen (in LOOPR) |
 | ESC | LOOPR sluiten / muis vrijgeven |
 
@@ -27,6 +29,16 @@ Vereist een videokaart met Vulkan-ondersteuning; dat heeft vrijwel elke pc van n
 4. Klik **RECORD TAKE**. De rapper rapt twee maten en geeft een oordeel (1–5 sterren). Elke retake kost geduld.
 5. Klik **FINISH** om de beste take uit te brengen. Je krijgt geld, reputatie en Street Cred.
 6. Pas op met het volume: de geluidsmeter loopt op. Bij 100% belt de buurman de politie (€40 boete).
+
+## In v0.6: LOOPR 2.0
+- **Channel Rack**: slepen om te tekenen, rechtsklik wist. Tools: DRAW, VELOCITY (zachte ghost notes) en ROLL (2–4 hits per stap, voor hi-hat-rolls)
+- **Swing** (0–60%) voor boom bap-bounce
+- **Piano Roll** met twee lanes: MELODY en **808** (eigen toonhoogte per noot, plus GLIDE voor drill- en rage-slides)
+- **Patterns A–D** met CLONE om variaties te maken, en een **Playlist** van 8 maten. PAT speelt het huidige pattern af, SONG het hele arrangement
+- **Volledig nummer** (4+ maten, 2+ patterns) = ×1.5 streams na het slapen
+- **Mixer**: live meters, PAN, REVERB, LO-CUT, SOLO en een clip-waarschuwing. Clippen kost punten
+- Rappers letten nu ook op feel (swing, ghost notes, rolls, bewegende 808, glide) en op de mix (reverb of juist droog, niet clippen)
+- UNDO (Ctrl+Z)
 
 ## In v0.5
 - Nieuwe personages met normale verhoudingen (Quaternius, CC0): geen grote hoofden meer

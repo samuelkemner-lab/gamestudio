@@ -100,6 +100,7 @@ func record_take() -> bool:
 	npc.set_rapping(true)
 	_set_state(State.RECORDING)
 	_seq.stop()
+	_seq.set_song_mode(false)  # the rapper records over the pattern you're on
 	_seq.play()
 	return true
 
@@ -146,12 +147,13 @@ func finish() -> Dictionary:
 	var stars: int = best.stars
 	var rw := Judge.reward(rapper, stars, _gs.upgrades)
 	_gs.add(rw.money, rw.rep, rw.cred)
-	_gs.record_track(rapper.id, stars, best.score)
+	var song: bool = _seq.arrangement().song
+	_gs.record_track(rapper.id, stars, best.score, song)
 	npc.say(rapper.lines.pay, 3.5)
 	var summary := {
 		"rapper": rapper, "stars": stars, "score": best.score, "notes": best.notes,
 		"money": rw.money, "tip": rw.tip, "rep": rw.rep, "cred": rw.cred, "stormed_out": false,
-		"takes": takes_done,
+		"takes": takes_done, "song": song,
 	}
 	_leave()
 	finished.emit(summary)

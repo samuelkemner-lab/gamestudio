@@ -37,7 +37,7 @@ Lees **docs/ART_DIRECTION.md** (de masterprompt) vóór elke visuele taak en toe
 - `assets/shaders/night_building.gdshader`: Kenney-gebouwen 's nachts (donkere gevels, willekeurig verlichte ramen)
 - `tools/inspect_scene.gd`, `tools/contact_sheet.gd`: maten en materialen van modellen bekijken
 - `scripts/player.gd`: first-person controller, [E] interactie via de `interact`-meta
-- `scripts/rappers.gd`: rapperdata (smaak, geduld, brief, teksten); `scripts/judge.gd`: score 0–100 → sterren + beloning
+- `scripts/rappers.gd`: rapperdata (smaak, feel, mix, geduld, brief, teksten); `scripts/judge.gd`: score 0–100 (BPM 20, drums 25, melodie 15, signature 15, feel 10, mix 15, clipping −6) → sterren + beloning
 - `scripts/session.gd`: sessie-state machine (ARRIVING → WAITING → RECORDING → REVIEW → LEAVING)
 - `scripts/npc.gd`: Kenney Mini Character + accessoires, lopen, animaties, tekstballon, brabbelstem (`voice_synth.gd`)
 - `scripts/chaos.gd`: geluidsmeter → buren → politie; `scripts/game_state.gd`: geld/rep/cred + save (user://)
@@ -45,8 +45,9 @@ Lees **docs/ART_DIRECTION.md** (de masterprompt) vóór elke visuele taak en toe
 - `assets/models/quaternius_characters`: CC0-personages met normale verhoudingen (Quaternius Ultimate Modular). Armature heeft schaal 100: props in een 0.01-holder onder een BoneAttachment3D. Animaties heten `CharacterArmature|Idle_Neutral`, `|Walk`, `|Wave`, enz. Bron-GLB's staan in Git LFS: ophalen via media.githubusercontent.com
 - `scripts/shop.gd`: shop-items (upgrades, kits, instrumenten); `room_builder.apply_upgrades()` maakt ze zichtbaar in de kamer
 - Dagcyclus: 1 echte seconde = 1 game-minuut, om 06:00 val je in slaap; `game_state.sleep()` berekent streams, inkomsten en leaks
-- `scripts/sequencer.gd`: audiokern (16 stappen, melodie, kits, instrumenten, een audio-bus per spoor, mixer-API, save/restore)
-- `scripts/loopr_ui.gd`: LOOPR-interface (Channel Rack, Piano Roll, Mixer, SAVE, crash-scherm)
+- `scripts/sequencer.gd`: audiokern. 4 patterns (A–D) met drums + velocity + rolls + melodie + 808-toonhoogte, playlist van 8 maten (PAT/SONG), swing, glide, undo, scheduler voor rolls/swing. Per bus: lo-cut, reverb, pan; mute/solo. Deterministisch levelmodel (`step_peak`, `peak_db`) voor meters, clip-waarschuwing en judge
+- `scripts/loopr_ui.gd`: LOOPR-interface (Channel Rack met tools, Piano Roll met Melody/808-lane, Playlist, Mixer, SAVE, crash-scherm)
+- `scripts/loopr_grid.gd`: zelfgetekend grid met sleep-tekenen (rack, piano roll, playlist); `scripts/loopr_meter.gd`: level meter
 - `tests/run_tests.gd`: headless smoke tests
 - `tests/screenshot.gd`: screenshots voor visuele checks
 

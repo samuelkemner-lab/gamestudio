@@ -28,9 +28,10 @@ func add(money_delta: int, rep_delta: int, cred_delta: int) -> void:
 	save()
 
 
-func record_track(rapper_id: String, stars: int, score: int) -> void:
+## song = arranged in the Playlist (4+ bars, 2+ patterns): a full song streams 1.5x better.
+func record_track(rapper_id: String, stars: int, score: int, song: bool = false) -> void:
 	sessions += 1
-	tracks.append({"rapper": rapper_id, "stars": stars, "score": score, "day": day, "streams": 0})
+	tracks.append({"rapper": rapper_id, "stars": stars, "score": score, "day": day, "streams": 0, "song": song})
 	save()
 
 
@@ -66,6 +67,8 @@ func sleep() -> Dictionary:
 		var t: Dictionary = tracks[i]
 		var age := day - int(t.get("day", day))
 		var base := pow(float(t.stars), 2.2) * 160.0 * (1.0 + reputation / 40.0)
+		if t.get("song", false):
+			base *= 1.5
 		var s := int(base * randf_range(0.75, 1.25) / (1.0 + age * 0.35))
 		var pay_rate := 0.004
 		if i == leak:

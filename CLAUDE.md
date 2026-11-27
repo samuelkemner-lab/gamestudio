@@ -1,6 +1,6 @@
 # Studio Grind – instructies voor Claude
 
-Studio-producer-sim à la Schedule I, gebouwd in **Godot 4.4 (GDScript, GL Compatibility)**.
+Studio-producer-sim à la Schedule I, gebouwd in **Godot 4.4 (GDScript, Forward+)**.
 Eigenaar: Sam. Sam beslist over design en look; Claude bouwt, test en commit.
 Volledig design: Claude Doc "Game Design Document – Studio Producer Sim".
 
@@ -19,6 +19,9 @@ Volledig design: Claude Doc "Game Design Document – Studio Producer Sim".
 - Moeilijkheid kiesbaar: Easy/Pro.
 - Chaos: buren → politie, beef in de studio, leaks, pc-crash.
 
+## Art direction
+Lees **docs/ART_DIRECTION.md** (de masterprompt) vóór elke visuele taak en toets elke screenshot aan de checklist daarin.
+
 ## Regels
 - Geen FL Studio-naam, -logo of -interface kopiëren. De DAW heet LOOPR en heeft een eigen look.
 - Alleen eigen of commercieel gelicenseerde audio. Placeholder-drums worden in code gegenereerd (`scripts/drum_synth.gd`).
@@ -27,7 +30,8 @@ Volledig design: Claude Doc "Game Design Document – Studio Producer Sim".
 - Kleine stappen: na elke stap tests draaien en committen.
 
 ## Structuur
-- `scenes/main.tscn` → `scripts/main.gd`: wereld (greybox), HUD, openen en sluiten van LOOPR
+- `scenes/main.tscn` → `scripts/main.gd`: HUD, monitor-SubViewport (LOOPR live op scherm), openen en sluiten van LOOPR
+- `scripts/room_builder.gd`: de slaapkamerstudio (props, materialen, licht, skyline), volgens de art direction
 - `scripts/player.gd`: first-person controller, [E] interactie via de `interact`-meta
 - `scripts/sequencer.gd`: audiokern (16 stappen, een audio-bus per spoor, mixer-API)
 - `scripts/loopr_ui.gd`: LOOPR-interface (Channel Rack + Mixer)
@@ -37,5 +41,5 @@ Volledig design: Claude Doc "Game Design Document – Studio Producer Sim".
 ## Testen
 ```
 godot --headless --path . -s tests/run_tests.gd        # moet RESULT: PASS geven
-xvfb-run -a godot --path . --rendering-driver opengl3 -s tests/screenshot.gd -- /tmp
+xvfb-run -a godot --path . --rendering-driver vulkan -s tests/screenshot.gd -- /tmp   # vereist mesa-vulkan-drivers (lavapipe)
 ```

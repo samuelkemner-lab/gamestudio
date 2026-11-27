@@ -23,25 +23,32 @@ func _run() -> void:
 	root.size = Vector2i(1600, 900)
 	var main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
-	for i in 10:
+	for i in 30:
 		await process_frame
 
 	# View toward the desk
-	main.player.position = Vector3(-0.3, 0.05, 0.3)
-	main.player.rotation.y = deg_to_rad(10)
-	main.player.camera.rotation.x = deg_to_rad(-12)
+	main.player.position = Vector3(-1.3, 0.05, 2.1)
+	main.player.rotation.y = deg_to_rad(-28)
+	main.player.camera.rotation.x = deg_to_rad(-14)
 	await _save(out + "/shot_room.png")
 
 	# Look at the monitor from the chair
-	main.player.position = Vector3(-0.7, 0.05, -1.2)
-	main.player.rotation.y = 0.0
-	main.player.camera.rotation.x = deg_to_rad(-18)
+	main.player.position = Vector3(-0.55, 0.05, -1.05)
+	main.player.rotation.y = deg_to_rad(8)
+	main.player.camera.rotation.x = deg_to_rad(-16)
+	main.sequencer.play()
 	for i in 5:
 		await physics_frame
 	await _save(out + "/shot_desk.png")
 
+	main.player.position = Vector3(0.2, 0.05, 0.6)
+	main.player.rotation.y = deg_to_rad(-75)
+	main.player.camera.rotation.x = deg_to_rad(-6)
+	for i in 5:
+		await physics_frame
+	await _save(out + "/shot_window.png")
+
 	main.open_loopr()
-	main.sequencer.play()
 	for i in 8:
 		await process_frame
 	await _save(out + "/shot_loopr.png")

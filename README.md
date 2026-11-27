@@ -1,4 +1,4 @@
-# Studio Grind (prototype v0.1)
+# Studio Grind (prototype v0.2)
 
 Een studio-producer-sim: je begint als wannabe SoundCloud-producer in je slaapkamer en bouwt beats in **LOOPR**.
 
@@ -16,8 +16,11 @@ Een studio-producer-sim: je begint als wannabe SoundCloud-producer in je slaapka
 | SPATIE | Beat afspelen/stoppen (in LOOPR) |
 | ESC | LOOPR sluiten / muis vrijgeven |
 
-## In v0.1
-- Grijze slaapkamerstudio met neonverlichting
+Vereist een videokaart met Vulkan-ondersteuning; dat heeft vrijwel elke pc van na 2016.
+
+## In v0.2
+- Uitgewerkte neon-slaapkamerstudio volgens `docs/ART_DIRECTION.md`: echte schaduwen, maanlicht door het raam, skyline, bureaulamp, booth-hoek en veel props
+- De monitor toont LOOPR live
 - LOOPR Channel Rack: 16-stappen sequencer met kick, snare, hi-hat, clap en 808; BPM 60–200; demo-beat
 - LOOPR Mixer: fader en mute per spoor, plus master
 - De drumgeluiden zijn tijdelijke placeholders, in code gegenereerd

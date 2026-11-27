@@ -4,6 +4,7 @@ extends Node
 
 signal step_changed(step: int)
 signal play_state_changed(is_playing: bool)
+signal pattern_changed
 
 const TRACKS: Array[String] = ["Kick", "Snare", "Hi-hat", "Clap", "808"]
 const STEPS := 16
@@ -58,20 +59,24 @@ func load_default_pattern() -> void:
 	pattern[3][12] = true
 	for s in [0, 10]:
 		pattern[4][s] = true
+	pattern_changed.emit()
 
 
 func clear() -> void:
 	for row in pattern:
 		row.fill(false)
+	pattern_changed.emit()
 
 
 func toggle(track: int, step: int) -> bool:
 	pattern[track][step] = not pattern[track][step]
+	pattern_changed.emit()
 	return pattern[track][step]
 
 
 func set_step(track: int, step: int, on: bool) -> void:
 	pattern[track][step] = on
+	pattern_changed.emit()
 
 
 func step_length() -> float:

@@ -62,6 +62,7 @@ func setup(sequencer: Sequencer) -> void:
 
 	seq.step_changed.connect(_on_step_changed)
 	seq.play_state_changed.connect(_on_play_state_changed)
+	seq.pattern_changed.connect(refresh_grid)
 	refresh_grid()
 
 
@@ -78,7 +79,7 @@ func _build_top_bar() -> Control:
 	bar.add_child(logo)
 
 	var sub := Label.new()
-	sub.text = "v0.1  //  bedroom edition"
+	sub.text = "v0.2  //  bedroom edition"
 	sub.add_theme_color_override("font_color", TEXT_DIM)
 	sub.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	bar.add_child(sub)
@@ -107,15 +108,13 @@ func _build_top_bar() -> Control:
 	var clear_btn := _button("CLEAR", PANEL_LIGHT)
 	clear_btn.custom_minimum_size = Vector2(100, 44)
 	clear_btn.pressed.connect(func():
-		seq.clear()
-		refresh_grid())
+		seq.clear())
 	bar.add_child(clear_btn)
 
 	var reset_btn := _button("DEMO BEAT", PANEL_LIGHT)
 	reset_btn.custom_minimum_size = Vector2(130, 44)
 	reset_btn.pressed.connect(func():
-		seq.load_default_pattern()
-		refresh_grid())
+		seq.load_default_pattern())
 	bar.add_child(reset_btn)
 
 	bar.add_child(_spacer())

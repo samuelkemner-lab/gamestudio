@@ -195,6 +195,8 @@ func _run() -> void:
 			["city_casino", Vector3(-50, 0.05, -7.5), 180.0, 9.0],
 			["city_east", Vector3(14, 0.05, 8.0), 25.0, 4.0],
 			["city_quay", Vector3(24, 0.05, 37.5), 165.0, 3.0],
+			["city_skyline", Vector3(10, 0.05, 38.6), 175.0, 7.0],
+			["city_bridge", Vector3(-30, 0.05, 38.6), 120.0, 14.0],
 			["city_alley", Vector3(20, 0.05, 30.0), 0.0, 4.0],
 			["city_rain", Vector3(-30, 0.05, 8.2), -60.0, 3.0],
 		]:

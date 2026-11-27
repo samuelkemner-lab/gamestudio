@@ -37,6 +37,11 @@ Vereist een videokaart met Vulkan-ondersteuning; dat heeft vrijwel elke pc van n
 5. Klik **FINISH** om de beste take uit te brengen. Je krijgt geld, reputatie en Street Cred.
 6. Pas op met het volume: de geluidsmeter loopt op. Bij 100% belt de buurman de politie (€40 boete).
 
+## In v0.9.1: Rotterdamse skyline
+- Over de Maas: een witte tuibrug met geknikte "zwanenhals"-pyloon, 40 tuien, basculedeel en verlicht dek, een uitkijktoren met kraaiennest en ring in het park, een markthal-boog met gloeiende glazen kopse kanten, gekantelde gele kubuswoningen naast een potloodtoren, een cluster hoge torens (gestapelde verschoven blokken, slanke toren met lichtkroon, toren met overstek), een leunend kantoor met ledgevel en een rood gestreepte toren.
+- Verre oever met kade, lantaarns en lichtreflecties op het water; nevel op afstand (dikker bij regen en mist).
+- Silhouetten zijn herkenbaar, maar er staan geen echte namen of logo's op.
+
 ## In v0.9: details en NPC-interacties
 - **Houdingen:** sprinten (FOV wordt breder), bukken (Ctrl/C) en liggen (Z) met een donker vignet, hoofd-ruimtecheck (je kunt niet opstaan onder een tafel), voetstappen per ondergrond (hout, steen, nat), landingsdip en -geluid, zaklamp.
 - **Zitten en liggen:** op de bureaustoel achter de pc, op bankjes op straat en aan de kade, op bed liggen (naar het plafond kijken; E = slapen).

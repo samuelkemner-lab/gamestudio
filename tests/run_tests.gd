@@ -471,6 +471,10 @@ func _run() -> void:
 	main._on_interacted(city.cat.body)
 	check(int(gs.buffs.chill) == 1 and city.cat.state == "petted", "petting the cat calms you (+1 take)")
 	check(city.flocks.size() >= 2, "pigeons on the quay")
+	var sky: RotterdamSkyline = city.skyline
+	for lm in ["swan_bridge", "observation_tower", "market_hall", "cube_houses", "vertical_city", "led_tower"]:
+		check(sky.landmarks.has(lm) and sky.landmarks[lm].get_child_count() > 0, "skyline has " + lm)
+	check(sky.towers.size() >= 40, "Rotterdam skyline: %d towers" % sky.towers.size())
 	var fl: PigeonFlock = city.flocks[0]
 	fl.scare()
 	check(fl._away > 0.0, "pigeons fly off when scared")

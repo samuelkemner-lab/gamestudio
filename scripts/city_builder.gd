@@ -51,6 +51,7 @@ var _signal_lamps: Array = []  # [[green_mat, amber_mat, red_mat], ...]
 var _greet_t := 0.0
 var _greeted := {}
 var _bouncer: NPC
+var skyline: RotterdamSkyline
 var cat: StreetCat
 var flocks: Array[PigeonFlock] = []
 var _stare := {}
@@ -156,6 +157,15 @@ func _outdoor_environment() -> void:
 	e.volumetric_fog_albedo = Color(0.78, 0.74, 0.86)
 	e.volumetric_fog_length = 64.0
 	e.volumetric_fog_gi_inject = 0.4
+	# far haze (volumetric fog only reaches 64 m): the skyline across the river fades into the night
+	e.fog_enabled = true
+	e.fog_mode = Environment.FOG_MODE_DEPTH
+	e.fog_light_color = Color("1b1824")
+	e.fog_density = 0.55
+	e.fog_depth_begin = 90.0
+	e.fog_depth_end = 900.0
+	e.fog_depth_curve = 1.6
+	e.fog_sky_affect = 0.0
 	e.adjustment_enabled = true
 	e.adjustment_contrast = 1.06
 	e.adjustment_saturation = 0.9
@@ -903,55 +913,8 @@ func _quay_and_river() -> void:
 	mmi.material_override = glow(Color("ffb46a"), 1.6)
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	g.add_child(mmi)
-	# cable-stayed bridge across the river: two white pylons, glowing fan cables, red warning lights
-	var white := mat(Color("d8dbe6"), 0.5, "")
-	var bz := 190.0
-	part(g, box(Vector3(520, 1.6, 18)), Vector3(40, 14.0, bz), mat(Color("2c2a36"), 0.8, ""))
-	for x in range(-200, 280, 40):
-		part(g, box(Vector3(5, 14, 5)), Vector3(x, 6.0, bz), mat(Color("24222c"), 0.9, ""))
-	var cable_m := glow(Color("c8d4ff"), 0.9)
-	for px in [10.0, 130.0]:
-		part(g, box(Vector3(3.5, 80, 3.5)), Vector3(px, 40, bz), white).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		part(g, sphere(1.0), Vector3(px, 81, bz), glow(Color("ff3030"), 8.0))
-		for k in 7:
-			for sgn in [-1, 1]:
-				var start := Vector3(px, 76 - k * 5.0, bz)
-				var anchor := Vector3(px + sgn * (14 + k * 9.0), 14.8, bz)
-				var mid := (anchor + start) / 2.0
-				var cable := MeshInstance3D.new()
-				cable.mesh = cyl(0.22, anchor.distance_to(start))
-				cable.material_override = cable_m
-				cable.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-				g.add_child(cable)
-				cable.position = mid
-				cable.basis = Basis(Quaternion(Vector3.UP, (anchor - start).normalized()))
-	var deck_lights: Array[Transform3D] = []
-	for x in range(-220, 300, 6):
-		deck_lights.append(Transform3D(Basis(), Vector3(x, 15.0, bz - 9.2)))
-	var dmm := MultiMesh.new()
-	dmm.transform_format = MultiMesh.TRANSFORM_3D
-	dmm.mesh = sphere(0.35)
-	dmm.instance_count = deck_lights.size()
-	for i in deck_lights.size():
-		dmm.set_instance_transform(i, deck_lights[i])
-	var dmmi := MultiMeshInstance3D.new()
-	dmmi.multimesh = dmm
-	dmmi.material_override = glow(Color("9fc4ff"), 5.0)
-	g.add_child(dmmi)
-	# skyline across the river
-	var far := mat(Color("0d0c17"), 0.9, "")
-	var lights: Array[Transform3D] = []
-	for i in 46:
-		var w := _rng.randf_range(10, 22)
-		var h := _rng.randf_range(20, 95)
-		var x := _rng.randf_range(-260, 300)
-		var z := _rng.randf_range(260, 340)
-		part(g, box(Vector3(w, h, w)), Vector3(x, h / 2.0 - 1.0, z), far).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		for row in range(1, int(h / 3.2)):
-			for c in range(int(w / 2.4)):
-				if _rng.randf() < 0.33:
-					lights.append(Transform3D(Basis().rotated(Vector3.UP, PI / 2.0).scaled(Vector3(1.8, 1.8, 1.8)), Vector3(x - w / 2.0 + 1.2 + c * 2.4, row * 3.2 - 1.0, z - w / 2.0 - 0.05)))
-	_multimesh(g, lights, glow(Color("ffc27a"), 2.2))
+	# the view across the Maas: swan bridge, observation tower, market hall, cube houses, towers
+	skyline = RotterdamSkyline.build(self, g)
 
 
 # ================= Lights =================
@@ -1230,6 +1193,7 @@ func apply_weather(w: String) -> void:
 	set_rain(1.0 if raining else 0.0)
 	set_wetness(1.0 if raining else (0.75 if w == "mist" else 0.45))
 	city_env.volumetric_fog_density = 0.028 if w == "mist" else (0.011 if raining else 0.007)
+	city_env.fog_density = 0.9 if w == "mist" else (0.72 if raining else 0.55)
 	_amb_rain.volume_db = -6.0 if raining else -80.0
 	# fewer people out in the rain, and the ones who are out hurry
 	for i in pedestrians.size():

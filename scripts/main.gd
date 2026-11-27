@@ -3,7 +3,7 @@ extends Node3D
 ## Title screen → bedroom studio → phone DMs → rapper session in the booth → rating & payout.
 
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
-const VERSION := "v0.11 prototype"
+const VERSION := "v0.12 prototype"
 const DAWN := 30 * 60  # 06:00 the next morning
 const BOOTH_LOOK := Vector3(1.45, 1.2, -1.6)
 const CITY_ORIGIN := Vector3(0, 0, 700)  # the street lives far away from the flat interior
@@ -37,6 +37,14 @@ var _flyers_day := -1
 var _flyers_today := 0
 var _cat_day := -1
 var in_city := false
+var area := "room"  # room | zuidkade | centraal | markt | haven | metro
+var districts := {}  # id -> DistrictBuilder
+var transit: Transit
+var _talk_mode := ""  # "" (people) | metro | tram | food | club
+var _tram_entry := {}
+var _tram_builder: CityBuilder
+const DISTRICT_ORIGINS := {"centraal": Vector3(0, 0, 1500), "markt": Vector3(0, 0, 2200), "haven": Vector3(0, 0, 2900)}
+const METRO_ORIGIN := Vector3(0, -80, 3600)
 var _monitor_vp: SubViewport
 var _fade: ColorRect
 
@@ -70,7 +78,19 @@ func _ready() -> void:
 	city.position = CITY_ORIGIN
 	add_child(city)
 	city.build_city()
-	_set_city_active(false)
+	for id in DISTRICT_ORIGINS:
+		var d := DistrictBuilder.new()
+		d.name = "District_" + id
+		d.position = DISTRICT_ORIGINS[id]
+		add_child(d)
+		d.build_district(id)
+		districts[id] = d
+	transit = Transit.new()
+	transit.position = METRO_ORIGIN
+	add_child(transit)
+	transit.main = self
+	transit.build_station()
+	transit.ride_finished.connect(_on_ride_finished)
 
 	game = GameState.new()
 	game.name = "GameState"
@@ -111,6 +131,10 @@ func _ready() -> void:
 	player.crashed.connect(_on_crash)
 	city.set_player(player)
 	city.game = game
+	for d in districts.values():
+		d.set_player(player)
+		d.game = game
+	_activate_area("room")
 
 	_build_hud()
 
@@ -215,7 +239,7 @@ func _process(delta: float) -> void:
 	var vp := get_viewport().get_visible_rect().size
 	crosshair.position = Vector2(0, vp.y / 2.0 - 16)
 	crosshair.size = Vector2(vp.x, 32)
-	var target: Object = null if _ui_open() else player.hover_target()
+	var target: Object = null if _ui_open() or transit.is_riding() else player.hover_target()
 	prompt.visible = target != null
 	if target:
 		prompt_text.text = _prompt_for(target)
@@ -242,12 +266,13 @@ func _tick_clock(delta: float) -> void:
 	while _clock_acc >= 1.0:
 		_clock_acc -= 1.0
 		game.minutes += 1
-		if in_city:
-			city.update_hours(game.minutes)
+		var ab := builder_for(area)
+		if ab:
+			ab.update_hours(game.minutes)
 		_check_pending()
 		_maybe_call()
 		game.check_goals()
-	var line := "DAY %d   ·   %s   ·   %s" % [game.day, game.clock_text(), "ZUIDKADE" if in_city else "KADE 17"]
+	var line := "DAY %d   ·   %s   ·   %s" % [game.day, game.clock_text(), area_title()]
 	if player and player.riding:
 		line += "\nE-STEP  %d km/h  ·  battery %d%%" % [int(round(player.riding.speed * 3.6)), int(ceil(float(game.estep.battery)))]
 	if not zoef.is_empty():
@@ -263,6 +288,15 @@ func _tick_clock(delta: float) -> void:
 		else:
 			show_toast("Sunrise. You pass out on your keyboard...")
 		go_to_sleep()
+
+
+func area_title() -> String:
+	match area:
+		"room":
+			return "KADE 17"
+		"metro":
+			return "METRO · " + Transit.station_name(transit.station).to_upper()
+	return Transit.station_name(area).to_upper()
 
 
 func _prompt_for(target: Object) -> String:
@@ -326,6 +360,8 @@ func _input(event: InputEvent) -> void:
 
 
 func _on_interacted(target: Object) -> void:
+	if transit.is_riding():
+		return
 	match target.get_meta("interact"):
 		"pc":
 			open_loopr()
@@ -339,8 +375,27 @@ func _on_interacted(target: Object) -> void:
 				show_toast("%s is still in your studio. Finish the session first." % session.rapper.get("name", "Someone"))
 			else:
 				go_outside()
+		"metro_in":
+			enter_metro(str(target.get_meta("station", "zuidkade")))
+		"metro_out":
+			exit_metro()
+		"metro_board":
+			_ride_menu("metro")
+		"tram_board":
+			_tram_entry = target.get_meta("tram")
+			_tram_builder = target.get_meta("builder")
+			_ride_menu("tram")
+		"kiosk", "busk", "station_hall", "market_hall":
+			_district_spot(str(target.get_meta("interact")))
 		"shop":
 			var id := str(target.get_meta("shop_id"))
+			var b: CityBuilder = target.get_meta("builder", city)
+			if b != city:
+				if not b.is_open(id, game.minutes):
+					show_toast("Closed. Opens again tomorrow night (closes at %s)." % b.closing_text(id))
+				else:
+					_district_shop(id)
+				return
 			if id == "home":
 				go_home()
 			elif not city.is_open(id, game.minutes):
@@ -424,6 +479,12 @@ func _talk_rapper() -> void:
 
 
 func _on_talk_chosen(id: String) -> void:
+	if _talk_mode != "":
+		var mode := _talk_mode
+		_talk_mode = ""
+		_set_ui_mode(false)
+		_on_menu_choice(mode, id)
+		return
 	var n := _talk_npc
 	_set_ui_mode(false)
 	if n == null:
@@ -481,6 +542,7 @@ func _on_talk_chosen(id: String) -> void:
 
 
 func _end_talk() -> void:
+	_talk_mode = ""
 	_set_ui_mode(false)
 	if _talk_npc and _talk_npc != session.npc:
 		_talk_npc.pause_route(1.0)
@@ -490,27 +552,57 @@ func _end_talk() -> void:
 # ---------- Outside world ----------
 
 func _set_city_active(on: bool) -> void:
-	in_city = on
-	city.visible = on
-	city.process_mode = Node.PROCESS_MODE_INHERIT if on else Node.PROCESS_MODE_DISABLED
-	room.visible = not on
-	room.process_mode = Node.PROCESS_MODE_DISABLED if on else Node.PROCESS_MODE_INHERIT
+	_activate_area("zuidkade" if on else "room")
+
+
+func builder_for(id: String) -> CityBuilder:
+	return city if id == "zuidkade" else districts.get(id, null)
+
+
+## Show/process only the place you're in. All outdoor places share the Zuidkade night environment.
+func _activate_area(id: String) -> void:
+	area = id
+	in_city = id != "room"
+	var outdoor := id != "room"
+	room.visible = not outdoor
+	room.process_mode = Node.PROCESS_MODE_DISABLED if outdoor else Node.PROCESS_MODE_INHERIT
 	if _monitor_vp:
-		_monitor_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED if on else SubViewport.UPDATE_ALWAYS
+		_monitor_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED if outdoor else SubViewport.UPDATE_ALWAYS
+	city.visible = id == "zuidkade"
+	city.process_mode = Node.PROCESS_MODE_INHERIT if id == "zuidkade" else Node.PROCESS_MODE_DISABLED
+	for k in districts:
+		var d: DistrictBuilder = districts[k]
+		d.visible = id == k
+		d.process_mode = Node.PROCESS_MODE_INHERIT if id == k else Node.PROCESS_MODE_DISABLED
+	if transit:
+		transit.visible = id == "metro"
 	# indoor and outdoor each have their own light / post setup
-	room.world_env.environment = city.city_env if on else room.room_env
-	room.world_env.camera_attributes = city.cam_attr if on else null
+	room.world_env.environment = city.city_env if outdoor else room.room_env
+	room.world_env.camera_attributes = city.cam_attr if outdoor else null
 	if player:
-		player.surface = ("wet" if game.weather == "rain" else "stone") if on else "wood"
-	if on:
+		player.surface = "wood" if not outdoor else ("stone" if id == "metro" else ("wet" if game.weather == "rain" else "stone"))
+	if outdoor:
 		city.apply_weather(game.weather)
-		city.update_hours(game.minutes)
-	city.set_audio_active(on)
+		var b := builder_for(id)
+		if b:
+			if b != city:
+				b.apply_weather(game.weather)
+			b.update_hours(game.minutes)
+	city.set_audio_active(id == "zuidkade")
+	for k in districts:
+		(districts[k] as DistrictBuilder).set_audio_active(id == k)
+	if transit:
+		if id == "metro":
+			transit.player_arrived()
+		else:
+			transit.player_left()
 
 
 ## Instant move between the flat and the street (fades are done by go_outside / go_home).
 func travel(to_city: bool) -> void:
 	sequencer.stop()
+	if transit.is_riding():
+		transit.cancel_ride()
 	if not to_city:
 		_leave_city()
 	_set_city_active(to_city)
@@ -578,6 +670,8 @@ func close_loopr() -> void:
 
 func toggle_phone() -> void:
 	phone.visible = not phone.visible
+	if not phone.visible:
+		phone.store_discount = 0.0
 	if phone.visible:
 		phone.go_home()
 		phone.refresh(game, session)
@@ -803,7 +897,7 @@ func _on_zoef(action: String) -> void:
 		_zoef_clear()
 		show_toast("Order cancelled.")
 		return
-	if not in_city or not zoef.is_empty():
+	if area != "zuidkade" or not zoef.is_empty():
 		return
 	var pick: Vector3 = city._shop_reg("snackbar").get("door_out", Vector3.ZERO)
 	var side := -1 if randf() < 0.5 else 1
@@ -922,6 +1016,232 @@ func complete_delivery() -> Dictionary:
 
 func _play_fx_ping() -> void:
 	_play_sfx(AmbienceSynth.ping())
+
+
+# ---------- Metro & tram ----------
+
+func fade_through(f: Callable) -> void:
+	if DisplayServer.get_name() == "headless" or not is_inside_tree():
+		f.call()
+		return
+	var tw := create_tween()
+	tw.tween_property(_fade, "color:a", 1.0, 0.3)
+	await tw.finished
+	f.call()
+	await get_tree().create_timer(0.12).timeout
+	var tw2 := create_tween()
+	tw2.tween_property(_fade, "color:a", 0.0, 0.45)
+
+
+func enter_metro(st: String) -> void:
+	if player.riding:
+		player.dismount()
+	fade_through(func():
+		_activate_area("metro")
+		transit.dress(st)
+		player.global_position = transit.to_global(Vector3(24.0, 0.05, 6.6))
+		player.rotation.y = 0.0
+		player.camera.rotation.x = 0.0
+		player.velocity = Vector3.ZERO
+		show_toast("Metro %s. Board at the open doors (€%d check-in), or take the escalator back up." % [Transit.station_name(st), Transit.FARE]))
+
+
+func exit_metro() -> void:
+	var st := transit.station
+	fade_through(func():
+		_activate_area(st)
+		var b := builder_for(st)
+		player.global_position = b.metro_exit_point()
+		player.rotation.y = b.metro_exit_yaw()
+		player.camera.rotation.x = 0.0
+		player.velocity = Vector3.ZERO
+		if st == "zuidkade" and estep and game.estep.home:
+			game.estep.home = false
+			_park_step_at_home()
+		show_toast(_arrival_hint(st)))
+
+
+## Called by Transit under the fade when the train reaches the next station.
+func metro_arrive(_dest: String) -> void:
+	pass
+
+
+func go_tram_area(dest: String) -> CityBuilder:
+	_activate_area(dest)
+	if dest == "zuidkade" and estep and game.estep.home:
+		game.estep.home = false
+		_park_step_at_home()
+	return builder_for(dest)
+
+
+func _arrival_hint(st: String) -> String:
+	match st:
+		"centraal":
+			return "Centraal. Kiosk, busking spot and taxis on the square."
+		"markt":
+			return "Marktplein. Huisraad warehouse (furniture −15%) and Döner Palace."
+		"haven":
+			return "Havenkwartier. Club De Kraan: open mic night, 23:00–05:00."
+	return "Zuidkade. Home is just down the street (Kade 17)."
+
+
+func _on_ride_finished(dest: String) -> void:
+	if area == "metro":
+		show_toast("%s. Mind the gap. Take the escalator (EXIT) up to the street." % Transit.station_name(dest))
+	else:
+		show_toast(_arrival_hint(dest))
+
+
+func _ride_menu(kind: String) -> void:
+	var here: String = transit.station if kind == "metro" else _tram_builder.station_id
+	var opts: Array = []
+	for id in Transit.LINE_ORDER:
+		if id == here or (kind == "tram" and not Transit.STATIONS[id].tram):
+			continue
+		var stops := transit.stops_between(here, id)
+		opts.append(["%s  (%d stop%s)" % [Transit.station_name(id), stops, "" if stops == 1 else "s"], kind + ":" + id, game.money >= Transit.FARE])
+	_talk_npc = null
+	_talk_mode = kind
+	talk_ui.open("Metro → " + transit.terminus() if kind == "metro" else "Tram 4", "Check in: €%d  ·  you have €%d" % [Transit.FARE, game.money], opts)
+	_set_ui_mode(true)
+
+
+func _on_menu_choice(mode: String, id: String) -> void:
+	match mode:
+		"metro", "tram":
+			_board(mode, id.get_slice(":", 1))
+		"food":
+			var cost := 6 if id == "doner" else 9
+			if game.spend(cost):
+				game.add_buff("awake", 45 if id == "doner" else 60)
+				_play_sfx(AmbienceSynth.cash())
+				show_toast("%s. You'll stay up %d min longer tonight." % ["Döner box" if id == "doner" else "Kapsalon", 45 if id == "doner" else 60])
+		"club":
+			_club(id)
+
+
+func _board(kind: String, dest: String) -> void:
+	if kind == "metro" and not (transit.state == "dwell" and transit.door_f > 0.5):
+		show_toast("Too late, the doors are closing. Wait for the next one.")
+		return
+	if kind == "tram" and float(_tram_entry.get("dwell", 0.0)) < 1.0:
+		show_toast("Too late, the tram is leaving.")
+		return
+	if not game.spend(Transit.FARE):
+		show_toast("Not enough money for a ticket (€%d)." % Transit.FARE)
+		return
+	_play_sfx(AmbienceSynth.beep())
+	if kind == "metro":
+		transit.board_metro(dest)
+	else:
+		transit.board_tram(_tram_entry, _tram_builder, dest)
+	show_toast("*beep* Checked in (€%d). Next stop: %s." % [Transit.FARE, Transit.station_name(dest)])
+
+
+# ---------- District spots ----------
+
+func _district_shop(id: String) -> void:
+	match id:
+		"huisraad_store":
+			phone.store_discount = 0.15
+			toggle_phone()
+			phone.open_app("huisraad")
+			show_toast("Huisraad warehouse: everything 15% cheaper in the store.")
+		"doner":
+			_talk_npc = null
+			_talk_mode = "food"
+			talk_ui.open("Döner Palace", "Open till 05:00  ·  you have €%d" % game.money, [
+				["Döner box  (€6, stay up 45 min longer)", "doner", game.money >= 6],
+				["Kapsalon  (€9, stay up 60 min longer)", "kapsalon", game.money >= 9]])
+			_set_ui_mode(true)
+		"club":
+			if game.minutes < 23 * 60:
+				show_toast("De Kraan opens at 23:00. The queue is already forming.")
+				return
+			var done_tonight: bool = int(game.stats.get("openmic_day", -1)) == game.day
+			_talk_npc = null
+			_talk_mode = "club"
+			talk_ui.open("Club De Kraan", "Open mic tonight  ·  entry €10  ·  you have €%d" % game.money, [
+				["Perform at the open mic (€10)" if not done_tonight else "You already performed tonight", "openmic", game.money >= 10 and not done_tonight],
+				["Just dance for a bit (€10, chill: +1 take next session)", "dance", game.money >= 10]])
+			_set_ui_mode(true)
+
+
+## Open mic: the crowd reacts to your best release and your level.
+func _club(id: String) -> int:
+	if not game.spend(10):
+		return 0
+	if id == "dance":
+		game.add_buff("chill", 1)
+		show_toast("You dance until your legs hurt. Chill: +1 take with your next rapper.")
+		return 0
+	game.stats.openmic_day = game.day
+	var best := 0
+	for tr in game.tracks:
+		best = maxi(best, int(tr.stars))
+	if best == 0:
+		show_toast("You have nothing released yet. The crowd talks right over your set.")
+		return 0
+	var score := best * 18 + game.level() * 3 + randi() % 20
+	var rep := 0
+	var cred := 0
+	var tips := 0
+	var line := ""
+	if score >= 90:
+		rep = 6
+		cred = 3
+		tips = 40
+		line = "The whole club goes off. Phones in the air. Someone films it."
+	elif score >= 65:
+		rep = 4
+		cred = 2
+		tips = 20
+		line = "Hands up at the drop. A few people ask for your name."
+	elif score >= 40:
+		rep = 2
+		cred = 1
+		tips = 5
+		line = "Some heads nod. It's a start."
+	else:
+		line = "Polite clapping. Your beat needs more work."
+	game.add(tips, rep, cred)
+	game.add_xp(score / 2)
+	_play_sfx(AmbienceSynth.cash())
+	show_toast("%s  +%d REP  +%d CRED%s" % [line, rep, cred, "  +€%d tips" % tips if tips > 0 else ""])
+	return score
+
+
+func _district_spot(kind: String) -> void:
+	match kind:
+		"kiosk":
+			if game.spend(3):
+				game.add_buff("awake", 30)
+				_play_sfx(AmbienceSynth.cash())
+				show_toast("Black coffee from the kiosk. +30 min before you crash.")
+			else:
+				show_toast("Coffee is €3. You're broke.")
+		"busk":
+			busk()
+		"station_hall":
+			show_toast("No trains to other cities at night. Take the metro (M) on the square.")
+		"market_hall":
+			show_toast("The market hall is closed at night. The stalls open at 8:00.")
+
+
+## Play your beats on the station square for 30 minutes. Tips depend on your releases, REP and weather.
+func busk() -> int:
+	var best := 0
+	for tr in game.tracks:
+		best = maxi(best, int(tr.stars))
+	var tips := 3 + best * 4 + int(game.reputation / 5) + randi() % 8
+	if game.weather == "rain":
+		tips = int(tips * 0.5)
+	game.minutes += 30
+	game.add(tips, 1 if best >= 4 else 0, 0)
+	game.add_xp(8)
+	_play_sfx(AmbienceSynth.cash())
+	show_toast("30 minutes of beats on the square. €%d in your cap%s." % [tips, " (rain keeps people walking)" if game.weather == "rain" else ""])
+	return tips
 
 
 func _toggle_quality() -> void:

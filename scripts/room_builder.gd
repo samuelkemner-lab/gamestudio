@@ -328,6 +328,97 @@ func kit(parent: Node3D, model: String, pos: Vector3, rot_y := 0.0, scl: Variant
 	return pivot
 
 
+# ================= Vehicles (tram / metro) =================
+
+## A hollow passenger carriage (length along local Z) you can sit inside and look out of.
+## Thin panels instead of one box, window glass, lit interior, benches along the walls and
+## sliding double doors on both sides. Returns {"node", "doors": [[leaf_a, leaf_b, z, side]]}.
+func carriage(parent: Node3D, length: float, width: float, height: float, floor_y: float, body: Material, stripe: Material, door_zs: Array, light_col := Color("ffe9c8")) -> Dictionary:
+	var c := Node3D.new()
+	c.name = "Carriage"
+	parent.add_child(c)
+	var glass := StandardMaterial3D.new()
+	glass.albedo_color = Color(0.05, 0.07, 0.09, 0.35)
+	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass.roughness = 0.04
+	glass.metallic = 0.3
+	glass.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var inner := mat(Color("cfd2d6"), 0.6, "")
+	var floor_m := mat(Color("3a3d44"), 0.85, "")
+	var seat_m := mat(Color("2b4a6e"), 0.95, "fabric", 4.0)
+	var dark := mat(Color("16171b"), 0.7, "")
+	var hw := width / 2.0
+	var top := floor_y + height
+	var sill := floor_y + 0.95
+	var head := floor_y + 2.05
+	part(c, box(Vector3(width, 0.12, length)), Vector3(0, floor_y, 0), floor_m)
+	part(c, box(Vector3(width - 0.3, maxf(floor_y - 0.15, 0.1), length - 1.0)), Vector3(0, maxf(floor_y - 0.15, 0.1) / 2.0 + 0.05, 0), dark)
+	part(c, box(Vector3(width, 0.12, length)), Vector3(0, top, 0), body)
+	part(c, box(Vector3(width - 0.5, 0.22, length - 0.4)), Vector3(0, top + 0.17, 0), body)
+	part(c, box(Vector3(width - 0.2, 0.04, length - 0.2)), Vector3(0, top - 0.08, 0), inner)
+	part(c, box(Vector3(0.35, 0.03, length - 1.2)), Vector3(0, top - 0.11, 0), glow(light_col, 1.3))
+	for zz in [-length / 2.0, length / 2.0]:
+		part(c, box(Vector3(width, height, 0.08)), Vector3(0, floor_y + height / 2.0, zz), body)
+	# side walls, split around the doors
+	var dw := 1.3
+	var cuts: Array = door_zs.duplicate()
+	cuts.sort()
+	var doors: Array = []
+	for side in [-1.0, 1.0]:
+		var x: float = side * (hw - 0.04)
+		var z0 := -length / 2.0
+		var bounds: Array = []
+		for dz in cuts:
+			bounds.append([z0, float(dz) - dw / 2.0])
+			z0 = float(dz) + dw / 2.0
+		bounds.append([z0, length / 2.0])
+		for b in bounds:
+			var seg: float = b[1] - b[0]
+			if seg <= 0.05:
+				continue
+			var mz: float = (b[0] + b[1]) / 2.0
+			part(c, box(Vector3(0.08, sill - floor_y, seg)), Vector3(x, (sill + floor_y) / 2.0, mz), body)
+			part(c, box(Vector3(0.1, 0.22, seg)), Vector3(x + side * 0.01, floor_y + 0.55, mz), stripe)
+			part(c, box(Vector3(0.03, head - sill, seg)), Vector3(x, (sill + head) / 2.0, mz), glass)
+			var n_p := maxi(int(seg / 1.7), 1)
+			for k in n_p + 1:
+				part(c, box(Vector3(0.1, head - sill, 0.12)), Vector3(x, (sill + head) / 2.0, b[0] + seg * k / n_p), body)
+			# benches along the wall, facing in
+			if seg > 1.6:
+				part(c, box(Vector3(0.5, 0.1, seg - 0.4)), Vector3(side * (hw - 0.35), floor_y + 0.46, mz), seat_m)
+				part(c, box(Vector3(0.1, 0.5, seg - 0.4)), Vector3(side * (hw - 0.14), floor_y + 0.75, mz), seat_m)
+				part(c, box(Vector3(0.45, 0.4, seg - 0.5)), Vector3(side * (hw - 0.35), floor_y + 0.22, mz), dark)
+		part(c, box(Vector3(0.08, top - head, length)), Vector3(x, (head + top) / 2.0, 0), body)
+		for dz in cuts:
+			# two sliding leaves (the opening behind them shows the lit interior)
+			var la := part(c, box(Vector3(0.06, head - floor_y - 0.05, dw / 2.0)), Vector3(side * (hw + 0.01), (head + floor_y) / 2.0, float(dz) - dw / 4.0), body)
+			var lb := part(c, box(Vector3(0.06, head - floor_y - 0.05, dw / 2.0)), Vector3(side * (hw + 0.01), (head + floor_y) / 2.0, float(dz) + dw / 4.0), body)
+			for leaf in [la, lb]:
+				part(leaf, box(Vector3(0.02, 0.9, dw / 2.0 - 0.14)), Vector3(side * 0.03, 0.25, 0), glass)
+			doors.append([la, lb, float(dz), side])
+	# grab poles
+	for k in range(1, int(length / 3.0)):
+		part(c, cyl(0.02, height), Vector3(0, floor_y + height / 2.0, -length / 2.0 + k * 3.0), mat(Color("c8ccd2"), 0.25, ""))
+	var l := OmniLight3D.new()
+	l.position = Vector3(0, top - 0.3, 0)
+	l.light_color = light_col
+	l.light_energy = 1.1
+	l.omni_range = maxf(length * 0.6, 6.0)
+	l.shadow_enabled = false
+	c.add_child(l)
+	return {"node": c, "doors": doors}
+
+
+## Open fraction 0..1 for the carriage doors returned by carriage().
+static func set_doors(doors: Array, f: float, side_filter := 0.0) -> void:
+	for d in doors:
+		if side_filter != 0.0 and float(d[3]) != side_filter:
+			continue
+		var z: float = d[2]
+		(d[0] as Node3D).position.z = z - 0.325 - f * 0.62
+		(d[1] as Node3D).position.z = z + 0.325 + f * 0.62
+
+
 # ================= Environment =================
 
 func _environment() -> void:

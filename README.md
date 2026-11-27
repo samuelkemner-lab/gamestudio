@@ -39,6 +39,29 @@ Vereist een videokaart met Vulkan-ondersteuning; dat heeft vrijwel elke pc van n
 5. Klik **FINISH** om de beste take uit te brengen. Je krijgt geld, reputatie en Street Cred.
 6. Pas op met het volume: de geluidsmeter loopt op. Bij 100% belt de buurman de politie (€40 boete).
 
+## In v0.12: metro, tram en drie nieuwe wijken
+- **Metro (4 stations):** Zuidkade → Centraal → Marktplein → Havenkwartier.
+  - Ga via het glazen paviljoen met de rode M naar beneden (E).
+  - Er komt een trein uit de tunnel die afremt en de deuren opent.
+  - E bij de deuren → bestemming kiezen → €2 inchecken (*piep*). Je gaat zitten, de deuren sluiten en de trein trekt op; de tunnellampen flitsen voorbij.
+  - Je rijdt het volgende station binnen, stapt uit op het perron en neemt de roltrap (EXIT) naar de straat.
+  - Een vertrekbord laat zien wanneer de volgende trein komt.
+- **Tram 4** rijdt tussen Zuidkade, Centraal en Marktplein.
+  - De tram remt af bij de halte (abri) en de deuren gaan open aan de stoepkant.
+  - E vanaf de stoeprand → bestemming → zitten → hij rijdt de straat uit en jij komt aan bij de halte van de andere wijk.
+- **Centraal (Stationsplein):**
+  - stationshal met puntdak en verlichte letters, fietsenrekken, taxistandplaats;
+  - kiosk: koffie €3, +30 min wakker;
+  - buskingplek: 30 min je beats spelen voor fooi (minder bij regen).
+- **Marktplein:**
+  - markthal-boog met gloeiende glazen gevel en gesloten marktkramen;
+  - **Huisraad-warenhuis** (alle meubels 15% goedkoper in de winkel);
+  - **Döner Palace** (wakker blijven).
+- **Havenkwartier:**
+  - kade met kranen, containers en water;
+  - club **De Kraan** (23:00–05:00, rij + uitsmijter): open mic voor €10, één keer per nacht. Het publiek reageert op je beste release en je level (REP, CRED, fooi). Of gewoon dansen voor de chill-buff.
+- **Elke wijk** heeft eigen voetgangers met naam en persona (je kunt ze aanspreken), regen, straatlicht en decals.
+
 ## In v0.11: doelen, levels, streak en huur
 - **Goals-app:** altijd 3 actieve doelen (17 in totaal, van "eerste track" tot "100.000 streams") met geld, REP en XP als beloning. Een melding verschijnt zodra je er een haalt.
 - **Producer-level:** XP voor sessies, ritten en doelen. Elk level geeft een bonus (€25 × level).

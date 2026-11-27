@@ -270,6 +270,106 @@ func _run() -> void:
 		main.city_ui.close()
 		main.travel(false)
 
+	# metro, tram and the new districts: names start with "t_"
+	var tviews: Array = []
+	for n in only:
+		if str(n).begins_with("t_"):
+			tviews.append(str(n))
+	if tviews.size() > 0:
+		var tr: Transit = main.transit
+		var pl = main.player
+		var settle := func(n: int) -> void:
+			for i in n:
+				await process_frame
+		if "t_entrance" in tviews:
+			main.travel(true)
+			var ep: Vector3 = main.city.metro_exit_point()
+			pl.global_position = ep + Vector3(-5.0, 0, -3.5)
+			pl.look_at(main.city.metro_entrance.global_position + Vector3(0, 1.2, 0), Vector3.UP)
+			pl.rotation.x = 0.0
+			pl.camera.rotation.x = deg_to_rad(4.0)
+			await settle.call(40)
+			await _save(out + "/shot_t_entrance.png")
+		if "t_platform" in tviews or "t_depart" in tviews or "t_tunnel" in tviews:
+			main.travel(true)
+			main.enter_metro("zuidkade")
+			tr.next_in = 0.0
+			for k in 600:
+				tr._cycle(0.05)
+				if tr.state == "dwell" and tr.door_f > 0.95:
+					break
+			tr.t = 0.0
+			if "t_platform" in tviews:
+				pl.global_position = tr.to_global(Vector3(-6.0, 0.05, 7.2))
+				pl.rotation.y = deg_to_rad(-35.0)
+				pl.camera.rotation.x = deg_to_rad(-4.0)
+				await settle.call(40)
+				await _save(out + "/shot_t_platform.png")
+			main._board("metro", "centraal")
+			# freeze the automatic ride so we can photograph its stages
+			tr.set_process(false)
+			if "t_depart" in tviews:
+				tr.door_f = 0.0
+				RoomBuilder.set_doors(tr.train_doors, 0.0)
+				tr.state = "departing"
+				tr.t = 3.2
+				tr.train.position.x = 0.5 * Transit.ACCEL * tr.t * tr.t
+				tr._ride_update(0.0)
+				pl.camera.rotation.x = deg_to_rad(-2.0)
+				await settle.call(30)
+				await _save(out + "/shot_t_depart.png")
+			if "t_tunnel" in tviews:
+				tr.state = "departing"
+				tr.train.position.x = 120.0
+				tr._ride_update(0.0)
+				pl.rotation.y += deg_to_rad(30.0)
+				await settle.call(30)
+				await _save(out + "/shot_t_tunnel.png")
+			tr.set_process(true)
+			tr.skip_ride()
+			main.exit_metro()
+		if "t_tramstop" in tviews or "t_tram_inside" in tviews:
+			main.travel(true)
+			var e: Dictionary = main.city.tram4
+			(e.node as Node3D).position.x = main.city.tram_stop_x
+			e.served = false
+			e.dwell = 14.0
+			e.door_f = 1.0
+			RoomBuilder.set_doors(e.doors, 1.0, -1.0)
+			main.city.set_process(false)
+			if "t_tramstop" in tviews:
+				pl.global_position = main.city.to_global(Vector3(-16.0, 0.05, 8.3))
+				pl.look_at(main.city.to_global(Vector3(-8.0, 1.6, 2.2)), Vector3.UP)
+				pl.rotation.x = 0.0
+				pl.camera.rotation.x = deg_to_rad(-3.0)
+				await settle.call(40)
+				await _save(out + "/shot_t_tramstop.png")
+			if "t_tram_inside" in tviews:
+				main._tram_entry = e
+				main._tram_builder = main.city
+				main._board("tram", "centraal")
+				main.transit._ride_update(0.0)
+				pl.rotation.y += deg_to_rad(-25.0)
+				pl.camera.rotation.x = deg_to_rad(-2.0)
+				await settle.call(40)
+				await _save(out + "/shot_t_tram_inside.png")
+				main.transit.cancel_ride()
+			main.city.set_process(true)
+		for spec in [["t_centraal", "centraal", Vector3(0.0, 0.05, 4.0), 10.0, 14.0], ["t_markt", "markt", Vector3(22.0, 0.05, 4.0), 70.0, 8.0],
+				["t_markt_shops", "markt", Vector3(-18.0, 0.05, 1.0), 180.0, 6.0],
+				["t_haven", "haven", Vector3(-5.0, 0.05, 15.0), 160.0, 8.0], ["t_haven_water", "haven", Vector3(0.0, 0.05, 13.0), 0.0, 6.0]]:
+			if not spec[0] in tviews:
+				continue
+			main._activate_area(spec[1])
+			var d: DistrictBuilder = main.districts[spec[1]]
+			pl.global_position = d.to_global(spec[2])
+			pl.rotation.y = deg_to_rad(spec[3])
+			pl.camera.rotation.x = deg_to_rad(spec[4])
+			await settle.call(60)
+			await _save(out + "/shot_%s.png" % spec[0])
+		quit()
+		return
+
 	if want.call("daw"):
 		var sq: Sequencer = main.sequencer
 		sq.stop()

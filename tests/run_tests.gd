@@ -649,5 +649,106 @@ func _run() -> void:
 	main.results.visible = false
 	main._set_ui_mode(false)
 
+	# ---------- v0.12: metro, tram, districts ----------
+	gs.reset()
+	gs.money = 200
+	sess.state = Session.State.IDLE
+	check(main.districts.size() == 3, "three new districts (Centraal, Marktplein, Havenkwartier)")
+	for id in main.districts:
+		var d: DistrictBuilder = main.districts[id]
+		check(d.metro_entrance != null and d.metro_entrance.get_meta("station") == id, "%s has a metro entrance" % id)
+	check(not main.districts.haven.tram4.is_empty() == false and not main.districts.centraal.tram4.is_empty(), "tram 4 runs in Centraal (not in the harbour)")
+	main.travel(true)
+	check(main.area == "zuidkade", "outside = Zuidkade")
+	main._on_interacted(city.metro_entrance)
+	check(main.area == "metro" and main.transit.visible and not city.visible and main.transit.station == "zuidkade", "go down into metro Zuidkade")
+	var tr: Transit = main.transit
+	# fast-forward the train into the station
+	tr.next_in = 0.0
+	for k in 400:
+		tr._cycle(0.05)
+		if tr.state == "dwell" and tr.door_f > 0.8:
+			break
+	check(tr.state == "dwell" and tr.train.position.x == 0.0 and tr.board_body.collision_layer == 1, "train arrives, stops at the platform, doors open")
+	var fare0 := gs.money
+	main._ride_menu("metro")
+	check(main.talk_ui.visible and main._talk_mode == "metro", "destination menu at the doors")
+	main.talk_ui.choose("metro:haven")
+	check(tr.is_riding() and pl.pose == "seat" and pl.pose_lock and gs.money == fare0 - Transit.FARE, "boarded: seated, checked in (€%d)" % Transit.FARE)
+	main._on_interacted(city.metro_entrance)
+	check(main.area == "metro", "can't wander off while riding")
+	# let the doors close and the train pull out, then the fade switches stations
+	for k in 600:
+		tr._process(0.05)
+		if not tr.is_riding():
+			break
+	check(not tr.is_riding() and tr.station == "haven" and pl.pose == "" and not pl.pose_lock, "ride: depart, tunnel, arrive at Havenkwartier, step out")
+	check(tr.to_local(pl.global_position).z > 2.0, "you step out onto the platform")
+	main._on_interacted(tr.exit_body)
+	check(main.area == "haven" and main.districts.haven.visible and not tr.visible, "escalator up: Havenkwartier street")
+	check(pl.global_position.distance_to(main.districts.haven.metro_exit_point()) < 0.5, "you come up next to the metro pavilion")
+	# club
+	gs.minutes = 23 * 60 + 30
+	gs.tracks = [{"rapper": "lil_tear", "stars": 5, "score": 95, "day": 1, "streams": 0, "song": false}]
+	var rep_c := gs.reputation
+	var score: int = main._club("openmic")
+	check(score > 0 and gs.reputation > rep_c and int(gs.stats.openmic_day) == gs.day, "open mic at De Kraan (score %d)" % score)
+	# back to Centraal by metro, then tram to Marktplein
+	main._on_interacted(main.districts.haven.metro_entrance)
+	tr.state = "dwell"
+	tr.t = 0.0
+	tr.door_f = 1.0
+	tr.train.position.x = 0.0
+	tr.train.visible = true
+	main._board("metro", "centraal")
+	tr.skip_ride()
+	main.exit_metro()
+	check(main.area == "centraal", "metro to Centraal")
+	var cen: DistrictBuilder = main.districts.centraal
+	var m_k := gs.money
+	main._on_interacted(cen.features.kiosk)
+	check(gs.money == m_k - 3 and int(gs.buffs.awake) >= 30, "kiosk coffee keeps you up")
+	var t_b := gs.minutes
+	var tips: int = main.busk()
+	check(tips > 0 and gs.minutes == t_b + 30, "busking on the square: €%d in 30 min" % tips)
+	var e: Dictionary = cen.tram4
+	(e.node as Node3D).position.x = cen.tram_stop_x - 1.0
+	e.served = false
+	e.dwell = 0.0
+	for k in 100:
+		cen._drive(0.05)
+		if float(e.dwell) > 0.0 and float(e.door_f) > 0.8:
+			break
+	check(float(e.dwell) > 0.0 and is_equal_approx((e.node as Node3D).position.x, cen.tram_stop_x) and (e.board as StaticBody3D).collision_layer == 1, "tram 4 stops, doors open")
+	main._on_interacted(e.board)
+	check(main.talk_ui.visible and main._talk_mode == "tram", "tram destination menu")
+	main.talk_ui.choose("tram:markt")
+	check(tr.is_riding() and tr.ride.kind == "tram" and pl.pose_lock, "seated in the tram")
+	for k in 800:
+		cen._drive(0.05)
+		if main.area == "markt":
+			main.districts.markt._drive(0.05)
+		tr._ride_update(0.05)
+		if not tr.is_riding():
+			break
+	check(main.area == "markt" and not tr.is_riding() and pl.pose == "", "tram ride: Centraal → Marktplein, step out at the stop")
+	# Marktplein: warehouse discount + döner
+	var mk: DistrictBuilder = main.districts.markt
+	gs.minutes = 23 * 60
+	main._on_interacted(mk.features.huisraad_store)
+	check(main.phone.visible and main.phone.app == "huisraad" and main.phone.store_discount > 0.0, "Huisraad warehouse opens with the store discount")
+	var m_h := gs.money
+	gs.money = 500
+	m_h = gs.money
+	check(gs.buy_furniture("poster", int(round(25 * 0.85))) and gs.money == m_h - 21, "in-store price")
+	main.toggle_phone()
+	check(main.phone.store_discount == 0.0, "discount ends when you leave")
+	main._district_shop("doner")
+	main.talk_ui.choose("doner")
+	check(int(gs.buffs.awake) >= 45, "döner keeps you up")
+	# home from anywhere at dawn
+	main.travel(false)
+	check(main.area == "room" and main.room.visible and not mk.visible, "travel home from a district")
+
 	print("RESULT: ", "PASS" if failures == 0 else "FAIL (%d)" % failures)
 	quit(failures)

@@ -31,6 +31,7 @@ var pose := ""  # "" free, "seat", "bed"
 var held: RigidBody3D
 var riding: EStep  # on the e-step
 var _crash_roll := 0.0
+var pose_lock := false  # seated in a moving tram/metro: can't get up until it stops
 var flashlight: SpotLight3D
 
 var _bob_t := 0.0
@@ -170,7 +171,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				if riding:
 					dismount()
 				elif pose != "":
-					leave_pose()
+					if not pose_lock:
+						leave_pose()
 				elif posture == Posture.PRONE:
 					set_posture(Posture.CROUCH)
 				elif posture == Posture.CROUCH:

@@ -237,6 +237,43 @@ static func bell() -> AudioStreamWAV:
 	return _wav(out, false)
 
 
+## Door chime (tram / metro): two soft notes down.
+static func chime() -> AudioStreamWAV:
+	var n := int(RATE * 0.9)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		var f := 1046.5 if t < 0.32 else 784.0
+		var tt := t if t < 0.32 else t - 0.32
+		out[i] = (sin(TAU * f * t) + sin(TAU * f * 2.0 * t) * 0.15) * exp(-tt * 5.0) * 0.32
+	return _wav(out, false)
+
+
+## Check-in beep at the card reader.
+static func beep() -> AudioStreamWAV:
+	var n := int(RATE * 0.16)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		out[i] = sin(TAU * 1975.0 * t) * 0.3 * (1.0 if t < 0.13 else 0.0)
+	return _wav(out, false)
+
+
+## Low electric rumble of a metro train (loop, pitch it with speed).
+static func rumble() -> AudioStreamWAV:
+	var n := int(RATE * 1.0)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		lp = lp * 0.97 + (randf() * 2.0 - 1.0) * 0.03
+		out[i] = (sin(TAU * 110.0 * t) * 0.25 + sin(TAU * 330.0 * t) * 0.08 + lp * 2.2) * 0.6
+	return _wav(out, true)
+
+
 ## Coins / payout jingle.
 static func cash() -> AudioStreamWAV:
 	var n := int(RATE * 0.5)

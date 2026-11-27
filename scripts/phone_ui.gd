@@ -29,6 +29,7 @@ var ctx: Object  # main.gd: in_city, zoef
 var _gs: GameState
 var _session: Session
 var _easy := true
+var store_discount := 0.0  # in the Huisraad warehouse
 var _screen: VBoxContainer
 var _status_time: Label
 
@@ -429,6 +430,8 @@ func _buy_card(title: String, desc: String, price: int, status: String, on_buy: 
 func _huisraad() -> void:
 	var st := _gs.room_stats()
 	_header("Huisraad", "VIBE %d  ·  ACOUSTICS %d  ·  COMFORT %d   (€%d)" % [st.vibe, st.acoustics, st.comfort, _gs.money])
+	if store_discount > 0.0:
+		_screen.add_child(UIKit.label("In the warehouse: −%d%% on everything" % int(store_discount * 100), 13, UIKit.GOLD))
 	_screen.add_child(UIKit.wrap_label("VIBE: +%d%% session pay%s.  ACOUSTICS: noise rises %d%% slower.  COMFORT: you stay up %d min longer." % [
 		int(round((Furniture.pay_mult(st) - 1.0) * 100.0)), ", rappers +1 take" if int(st.vibe) >= 12 else " (12+: rappers +1 take)",
 		int(round((1.0 - Furniture.noise_mult(st)) * 100.0)), Furniture.comfort_minutes(st)], 12, UIKit.DIM, 330))
@@ -445,11 +448,12 @@ func _huisraad() -> void:
 					_render()
 				_screen.add_child(_buy_card(it.name, it.desc, int(it.price), "", on_place, stat_txt, "IN ROOM ✓" if in_room else "PLACE", true))
 			else:
+				var price := int(round(int(it.price) * (1.0 - store_discount)))
 				var on_buy := func():
-					if _gs.buy_furniture(id):
+					if _gs.buy_furniture(id, price):
 						furniture_changed.emit()
 					_render()
-				_screen.add_child(_buy_card(it.name, it.desc, int(it.price), "", on_buy, stat_txt))
+				_screen.add_child(_buy_card(it.name, it.desc, price, "", on_buy, stat_txt))
 
 
 # ---------- Ruilmarkt (second hand) ----------
@@ -498,13 +502,13 @@ func _zoef() -> void:
 	if z.is_empty():
 		v.add_child(UIKit.wrap_label("Pick up at Snackbar De Hoek, drop it at the door. €6–14 per ride + tip. Faster = more money. Rain = +30% tips. An e-step helps a lot.", 13, UIKit.DIM, 330))
 		var b := UIKit.button("GO ONLINE · FIND A RIDE", UIKit.ACCENT, 14)
-		b.disabled = not (ctx and ctx.get("in_city"))
+		b.disabled = not (ctx and ctx.get("area") == "zuidkade")
 		b.pressed.connect(func():
 			zoef_requested.emit("start")
 			_render())
 		v.add_child(b)
-		if not (ctx and ctx.get("in_city")):
-			v.add_child(UIKit.label("Go outside to start delivering.", 12, UIKit.POP))
+		if not (ctx and ctx.get("area") == "zuidkade"):
+			v.add_child(UIKit.label("Zoef only delivers in Zuidkade. Go there first.", 12, UIKit.POP))
 	else:
 		v.add_child(UIKit.label("Active order: " + str(z.food), 16, UIKit.TEXT))
 		v.add_child(UIKit.label(("Picked up → deliver to " if z.picked else "Pick up at Snackbar De Hoek → ") + str(z.address), 13, UIKit.CYAN))

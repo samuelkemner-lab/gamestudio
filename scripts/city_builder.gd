@@ -52,6 +52,10 @@ var _greet_t := 0.0
 var _greeted := {}
 var _bouncer: NPC
 var skyline: RotterdamSkyline
+var tram4: Dictionary
+var metro_entrance: StaticBody3D
+var station_id := "zuidkade"
+var tram_stop_x := -8.0
 var cat: StreetCat
 var flocks: Array[PigeonFlock] = []
 var _stare := {}
@@ -97,7 +101,10 @@ func build_city() -> void:
 	_parked_cars()
 	_tram_lines()
 	_traffic()
-	_tram()
+	tram4 = _tram(-8.0, -120.0, "4  CENTRAAL")
+	_tram_shelter(-8.0, 1, "Zuidkade")
+	metro_entrance = _metro_entrance(Vector3(40.0, 0, 8.2), 180.0, "Zuidkade")
+	metro_entrance.set_meta("station", "zuidkade")
 	_traffic_lights()
 	_pedestrians()
 	_smokers()
@@ -299,6 +306,16 @@ func _decals() -> void:
 
 func spawn_point() -> Vector3:
 	return to_global(spawn_local)
+
+
+## Street side of the metro entrance pavilion (where you come up from the platform).
+func metro_exit_point() -> Vector3:
+	return metro_entrance.get_parent().to_global(Vector3(0, 0.05, 2.6))
+
+
+## Yaw for the player stepping out of the pavilion (facing away from it).
+func metro_exit_yaw() -> float:
+	return (metro_entrance.get_parent() as Node3D).global_rotation.y + PI
 
 
 # ================= Ground, roads, sidewalks =================
@@ -1132,11 +1149,14 @@ func _drive(delta: float) -> void:
 			if to_line > -0.5 and to_line < 14.0:
 				blocked = true
 		var target: float = 0.0 if blocked else c.speed
+		if c.has("stop_x"):
+			target = _tram_stop(c, delta, target)
 		c.cur = move_toward(c.cur, target, (18.0 if blocked else 5.0) * delta)
 		n.position.x += c.dir * c.cur * delta
 		if not n.has_meta("brake"):
 			if n.position.x * c.dir > 150.0:
 				n.position.x = -150.0 * c.dir
+				c.served = false
 			continue
 		var bm: StandardMaterial3D = n.get_meta("brake")
 		var braking: bool = c.cur < c.speed * 0.6
@@ -1277,49 +1297,181 @@ func _tram_lines() -> void:
 		span.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
-func _tram() -> void:
+## Articulated low-floor tram (3 hollow sections) on line 4. It stops at `stop_x`, opens the doors on the
+## sidewalk side for a while (board with E), then drives on. Returns its entry in `cars`.
+func _tram(stop_x := -8.0, start_x := -120.0, dest := "4  CENTRAAL") -> Dictionary:
 	var t := Node3D.new()
 	t.name = "Tram"
 	add_child(t)
-	var body := mat(Color("2c2f36"), 0.35, "")
-	body.metallic = 0.2
-	var stripe := mat(Color("1fa39a"), 0.4, "")
-	var win_m := glow(Color("ffe2b8"), 0.9)
-	var glass := mat(Color("0d0f14"), 0.08, "")
+	var body := mat(Color("c9ccd2"), 0.35, "")
+	body.metallic = 0.35
+	var stripe := mat(Color("d6302a"), 0.45, "")
+	var doors: Array = []
 	for seg in 3:
-		var z := -9.4 + seg * 9.4
-		part(t, box(Vector3(2.5, 3.0, 9.0)), Vector3(0, 1.85, z), body)
-		part(t, box(Vector3(2.52, 0.25, 9.02)), Vector3(0, 0.75, z), stripe)
-		part(t, box(Vector3(2.54, 1.0, 7.6)), Vector3(0, 2.15, z), glass)
-		for side in [-1.0, 1.0]:
-			part(t, box(Vector3(0.02, 0.9, 7.4)), Vector3(side * 1.275, 2.15, z), win_m)
+		var holder := Node3D.new()
+		holder.position = Vector3(0, 0, -9.4 + seg * 9.4)
+		t.add_child(holder)
+		var car := carriage(holder, 9.0, 2.5, 2.3, 0.42, body, stripe, [0.0])
+		doors.append_array(car.doors)
 		if seg < 2:
-			part(t, box(Vector3(2.3, 2.7, 0.5)), Vector3(0, 1.75, z + 4.7), mat(Color("15161a"), 0.9, "fabric"))
-	part(t, box(Vector3(0.1, 0.9, 1.2)), Vector3(0, 3.8, 0), mat(Color("444"), 0.4, ""), Vector3(25, 0, 0))  # pantograph
-	part(t, box(Vector3(1.4, 0.06, 0.1)), Vector3(0, 4.25, 0.2), mat(Color("444"), 0.4, ""))
-	var dest := text3d(t, "4  ZUIDKADE", Vector3(0, 3.05, 14.06), Color("ffb547"), 0.004, Vector3.ZERO, 3.0)
-	dest.name = "Dest"
+			part(t, box(Vector3(2.3, 2.5, 0.42)), Vector3(0, 1.62, -9.4 + seg * 9.4 + 4.7), mat(Color("15161a"), 0.9, "fabric"))  # bellows
+	# cabs with destination signs and lights
+	for e in [-1.0, 1.0]:
+		var cz: float = e * 14.15
+		part(t, box(Vector3(2.5, 1.0, 0.5)), Vector3(0, 0.95, cz), body)
+		part(t, box(Vector3(2.4, 1.2, 0.08)), Vector3(0, 2.0, cz + e * 0.1), mat(Color("0b0d10"), 0.05, ""), Vector3(e * -12.0, 0, 0))
+		part(t, box(Vector3(1.6, 0.26, 0.05)), Vector3(0, 2.6, cz + e * 0.18), mat(Color("0a0a0a"), 0.6, ""))
+		text3d(t, dest, Vector3(0, 2.6, cz + e * 0.22), Color("ffb547"), 0.0034, Vector3(0, 0 if e > 0 else 180, 0), 3.0)
+		for hx in [-0.85, 0.85]:
+			part(t, sphere(0.09), Vector3(hx, 0.85, cz + e * 0.27), glow(Color("fff3dc") if e > 0 else Color("ff2a1a"), 4.0))
+	part(t, box(Vector3(0.1, 0.9, 1.2)), Vector3(0, 3.35, 0), mat(Color("444"), 0.4, ""), Vector3(25, 0, 0))  # pantograph
+	part(t, box(Vector3(1.4, 0.06, 0.1)), Vector3(0, 3.8, 0.2), mat(Color("444"), 0.4, ""))
 	t.rotation_degrees.y = 90.0
-	t.position = Vector3(-120, 0, 1.7)
+	t.position = Vector3(start_x, 0, 1.7)
 	var hl := SpotLight3D.new()
 	t.add_child(hl)
-	hl.position = Vector3(0, 0.9, 14.2)
+	hl.position = Vector3(0, 0.9, 14.5)
 	hl.rotation_degrees = Vector3(-6, 180, 0)
 	hl.light_color = Color("fff3dc")
 	hl.light_energy = 5.0
 	hl.spot_range = 22.0
 	hl.spot_angle = 30.0
-	var inner := OmniLight3D.new()
-	t.add_child(inner)
-	inner.position = Vector3(0, 2.4, 0)
-	inner.light_color = Color("ffe2b8")
-	inner.light_energy = 1.2
-	inner.omni_range = 7.0
 	var bell := AudioStreamPlayer3D.new()
 	bell.stream = AmbienceSynth.tram_bell()
 	bell.unit_size = 12.0
 	t.add_child(bell)
-	cars.append({"node": t, "dir": 1, "lane": 1.7, "speed": 7.0, "cur": 7.0, "len": 28.5, "bell": bell})
+	var chime := AudioStreamPlayer3D.new()
+	chime.stream = AmbienceSynth.chime()
+	chime.unit_size = 6.0
+	chime.position = Vector3(-1.2, 1.5, 0)
+	t.add_child(chime)
+	# what you press E on to board: a thick invisible slab on the sidewalk side, only active while the doors are open
+	var board := StaticBody3D.new()
+	var col := CollisionShape3D.new()
+	var sh := BoxShape3D.new()
+	sh.size = Vector3(1.6, 2.6, 26.0)
+	col.shape = sh
+	board.add_child(col)
+	board.position = Vector3(-2.0, 1.3, 0)
+	board.collision_layer = 0
+	board.set_meta("interact", "tram_board")
+	board.set_meta("label", "Board tram 4")
+	t.add_child(board)
+	RoomBuilder.set_doors(doors, 0.0)
+	var entry := {"node": t, "dir": 1, "lane": 1.7, "speed": 7.0, "cur": 7.0, "len": 28.5, "bell": bell,
+		"stop_x": stop_x, "dwell": 0.0, "served": false, "doors": doors, "door_f": 0.0, "board": board, "chime": chime, "dwell_time": 14.0}
+	board.set_meta("tram", entry)
+	board.set_meta("builder", self)
+	cars.append(entry)
+	return entry
+
+
+## Tram stop shelter ("abri") with a timetable plate and the line number.
+func _tram_shelter(x: float, side: int, stop_name: String) -> void:
+	var g := Node3D.new()
+	g.name = "TramStop"
+	g.position = Vector3(x, 0, side * (ROAD_HW + 1.6))
+	add_child(g)
+	var frame := mat(Color("2b2d33"), 0.35, "")
+	frame.metallic = 0.6
+	var glass := StandardMaterial3D.new()
+	glass.albedo_color = Color(0.7, 0.8, 0.9, 0.18)
+	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass.roughness = 0.05
+	var back := side * 1.1
+	part(g, box(Vector3(4.2, 2.3, 0.04)), Vector3(0, 1.25, back), glass)
+	for ex in [-2.1, 2.1]:
+		part(g, box(Vector3(0.08, 2.5, 1.2)), Vector3(ex, 1.25, back * 0.5), frame)
+	part(g, box(Vector3(4.5, 0.1, 1.5)), Vector3(0, 2.5, back * 0.5), frame)
+	part(g, box(Vector3(4.3, 0.06, 1.3)), Vector3(0, 2.44, back * 0.5), glow(Color("e8f0ff"), 1.2))
+	part(g, box(Vector3(2.6, 0.08, 0.4)), Vector3(0, 0.5, back * 0.75), mat(Color("6b6f78"), 0.5, ""))
+	# advertising light box on one end + stop pole
+	part(g, box(Vector3(0.12, 1.7, 1.1)), Vector3(2.25, 1.2, back * 0.5), glow(Color("ffe8c8"), 0.9))
+	part(g, cyl(0.05, 3.0), Vector3(-2.6, 1.5, 0), frame)
+	part(g, box(Vector3(0.6, 0.6, 0.06)), Vector3(-2.6, 2.75, 0), mat(Color("f4f4f4"), 0.5, ""))
+	var face := Vector3(0, 180 if side > 0 else 0, 0)  # towards the road
+	text3d(g, "4", Vector3(-2.6, 2.75, -0.04 * side), Color("d6302a"), 0.01, face, 0.0)
+	text3d(g, "4", Vector3(-2.6, 2.75, 0.04 * side), Color("d6302a"), 0.01, face + Vector3(0, 180, 0), 0.0)
+	text3d(g, stop_name.to_upper(), Vector3(0, 2.62, back * 0.5 - side * 0.76), Color("f4f4f4"), 0.0028, face, 1.0)
+	solid(Vector3(4.2, 2.3, 0.2), g.position + Vector3(0, 1.15, back))
+
+
+## Metro entrance pavilion: glass box with an escalator going down and a big "M" on a pole.
+func _metro_entrance(pos: Vector3, rot_y: float, station: String) -> StaticBody3D:
+	var g := Node3D.new()
+	g.name = "MetroEntrance"
+	g.position = pos
+	g.rotation_degrees.y = rot_y
+	add_child(g)
+	var frame := mat(Color("26282e"), 0.35, "")
+	frame.metallic = 0.6
+	var glass := StandardMaterial3D.new()
+	glass.albedo_color = Color(0.6, 0.75, 0.85, 0.2)
+	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass.roughness = 0.05
+	# glass walls on 3 sides, open front (+Z)
+	part(g, box(Vector3(3.4, 2.8, 0.04)), Vector3(0, 1.4, -1.6), glass)
+	for ex in [-1.7, 1.7]:
+		part(g, box(Vector3(0.04, 2.8, 3.2)), Vector3(ex, 1.4, 0), glass)
+		part(g, box(Vector3(0.1, 2.9, 0.1)), Vector3(ex, 1.45, 1.6), frame)
+		part(g, box(Vector3(0.1, 2.9, 0.1)), Vector3(ex, 1.45, -1.6), frame)
+	part(g, box(Vector3(3.7, 0.18, 3.5)), Vector3(0, 2.92, 0), frame)
+	part(g, box(Vector3(3.2, 0.04, 3.0)), Vector3(0, 2.82, 0), glow(Color("f2f5ff"), 1.4))
+	# escalator disappearing into the floor + dark stairwell
+	part(g, box(Vector3(2.6, 0.04, 2.6)), Vector3(0, 0.03, -0.2), mat(Color("0b0b0e"), 0.9, ""))
+	part(g, box(Vector3(1.1, 0.08, 2.6)), Vector3(-0.6, 0.06, -0.2), mat(Color("6c7078"), 0.3, ""), Vector3(-14, 0, 0))
+	part(g, box(Vector3(1.1, 0.08, 2.6)), Vector3(0.6, 0.06, -0.2), mat(Color("6c7078"), 0.3, ""), Vector3(-14, 0, 0))
+	for hx in [-1.2, 0.0, 1.2]:
+		part(g, box(Vector3(0.08, 0.06, 2.6)), Vector3(hx, 0.95, -0.2), glow(Color("9fd0ff"), 1.5), Vector3(-14, 0, 0))
+	# "M" pole
+	part(g, cyl(0.07, 4.2), Vector3(2.3, 2.1, 1.5), frame)
+	part(g, box(Vector3(0.9, 0.9, 0.12)), Vector3(2.3, 4.3, 1.5), glow(Color("e3261c"), 2.2))
+	text3d(g, "M", Vector3(2.3, 4.28, 1.57), Color.WHITE, 0.012, Vector3.ZERO, 2.0)
+	text3d(g, "M", Vector3(2.3, 4.28, 1.43), Color.WHITE, 0.012, Vector3(0, 180, 0), 2.0)
+	text3d(g, "METRO  " + station.to_upper(), Vector3(0, 3.12, 1.76), Color.WHITE, 0.003, Vector3.ZERO, 1.5)
+	var l := OmniLight3D.new()
+	l.position = Vector3(0, 2.4, 0.4)
+	l.light_color = Color("e8eeff")
+	l.light_energy = 1.4
+	l.omni_range = 6.0
+	g.add_child(l)
+	var body := solid(Vector3(2.8, 2.6, 2.0), Vector3.ZERO, "metro_in", "Metro %s  (go down)" % station)
+	remove_child(body)
+	g.add_child(body)
+	body.position = Vector3(0, 1.3, -0.4)
+	for ex in [-1.7, 1.7]:
+		var w := solid(Vector3(0.1, 2.8, 3.2), Vector3.ZERO)
+		remove_child(w)
+		g.add_child(w)
+		w.position = Vector3(ex, 1.4, 0)
+	return body
+
+
+## Line 4 stop logic: brake smoothly to the stop, doors open (sidewalk side), wait, close, go.
+func _tram_stop(c: Dictionary, delta: float, target: float) -> float:
+	var n: Node3D = c.node
+	if c.dwell > 0.0:
+		c.dwell -= delta
+		c.cur = 0.0
+		c.door_f = move_toward(c.door_f, 1.0 if c.dwell > 1.4 else 0.0, delta * 1.5)
+		RoomBuilder.set_doors(c.doors, c.door_f, -1.0)
+		(c.board as StaticBody3D).collision_layer = 1 if c.dwell > 1.6 else 0
+		if c.dwell <= 0.0:
+			c.served = true
+			c.door_f = 0.0
+			RoomBuilder.set_doors(c.doors, 0.0)
+		return 0.0
+	var to_stop: float = (c.stop_x - n.position.x) * c.dir
+	if not c.served and to_stop > -0.3 and to_stop < 32.0:
+		if to_stop < 0.3:
+			c.cur = 0.0
+			n.position.x = c.stop_x
+			c.dwell = c.dwell_time
+			if n.is_inside_tree():
+				(c.chime as AudioStreamPlayer3D).play()
+			return 0.0
+		return minf(target, maxf(sqrt(2.0 * 1.4 * to_stop), 0.7))
+	return target
 
 
 func _traffic_lights() -> void:
@@ -1563,7 +1715,7 @@ func _pedestrians() -> void:
 		[Vector3(-64, 0, -8.6), Vector3(-2, 0, -8.6)],
 		[Vector3(60, 0, -8.6), Vector3(10, 0, -8.6)],
 		[Vector3(-60, 0, 8.4), Vector3(-6, 0, 8.4)],
-		[Vector3(64, 0, 8.4), Vector3(32, 0, 8.4)],
+		[Vector3(64, 0, 8.4), Vector3(45, 0, 8.4)],
 		[Vector3(-60, 0, 37.0), Vector3(60, 0, 37.0)],
 		[Vector3(CROSS_X + 7.0, 0, 11.0), Vector3(CROSS_X + 7.0, 0, 33.0)],
 	]

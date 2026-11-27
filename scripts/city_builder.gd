@@ -50,6 +50,14 @@ var _signal_t := 0.0
 var _signal_lamps: Array = []  # [[green_mat, amber_mat, red_mat], ...]
 var _greet_t := 0.0
 var _greeted := {}
+var _bouncer: NPC
+var cat: StreetCat
+var flocks: Array[PigeonFlock] = []
+var _stare := {}
+var _react_t := 0.0
+var _chat_t := 6.0
+var _chat_i := 0
+var seats: Array[StaticBody3D] = []
 var cam_attr: CameraAttributesPractical
 var quality_high := true
 var player: Node3D  # set by main, cars brake for it
@@ -92,6 +100,10 @@ func build_city() -> void:
 	_traffic_lights()
 	_pedestrians()
 	_smokers()
+	_wildlife()
+	_steam()
+	_loose_props()
+	_seats()
 	_bounds_walls()
 	_decals()
 	_moon()
@@ -825,10 +837,11 @@ func _casino() -> void:
 	# bouncer at the door
 	var bouncer := NPC.new()
 	add_child(bouncer)
-	bouncer.setup({"model": "business_male", "voice_hz": 95.0, "recolor": {}, "accessory": ""})
+	bouncer.setup({"model": "business_male", "voice_hz": 95.0, "recolor": {}, "accessory": "", "name": "Dennis", "persona": "bouncer"})
 	bouncer.position = g.transform * Vector3(2.4, 0, 1.1)
 	bouncer.rotation.y = 0.0
 	bouncer.name = "Bouncer"
+	_bouncer = bouncer
 
 
 func _process(delta: float) -> void:
@@ -842,6 +855,14 @@ func _process(delta: float) -> void:
 	if _greet_t <= 0.0:
 		_greet_t = 0.5
 		_greet()
+	_react_t -= delta
+	if _react_t <= 0.0:
+		_react_t = 0.2
+		_reactions(0.2)
+	_chat_t -= delta
+	if _chat_t <= 0.0:
+		_chat_t = randf_range(8.0, 13.0)
+		_smoker_chat()
 
 
 # ================= Quay, river, bridge, skyline =================
@@ -1210,9 +1231,13 @@ func apply_weather(w: String) -> void:
 	set_wetness(1.0 if raining else (0.75 if w == "mist" else 0.45))
 	city_env.volumetric_fog_density = 0.028 if w == "mist" else (0.011 if raining else 0.007)
 	_amb_rain.volume_db = -6.0 if raining else -80.0
-	# fewer people out in the rain
+	# fewer people out in the rain, and the ones who are out hurry
 	for i in pedestrians.size():
-		pedestrians[i].visible = not raining or i % 2 == 0
+		var p := pedestrians[i]
+		var smoker := str(p.data.get("persona", "")) == "smoker"
+		p.visible = not raining or i % 2 == 0 or smoker
+		p.walk_anim = "run" if raining and not smoker else "walk"
+		p.speed = (2.4 if raining else 1.15) if not smoker else 0.0
 
 
 func set_audio_active(on: bool) -> void:
@@ -1377,7 +1402,7 @@ func _smokers() -> void:
 		var n := NPC.new()
 		n.name = "Smoker%d" % i
 		add_child(n)
-		n.setup({"model": ["worker_male", "casual_female"][i], "recolor": {}, "voice_hz": [115.0, 220.0][i], "accessory": ""})
+		n.setup({"model": ["worker_male", "casual_female"][i], "recolor": {}, "voice_hz": [115.0, 220.0][i], "accessory": "", "name": ["Rachid", "Nienke"][i], "persona": "smoker"})
 		n.position = Vector3(4.6 + i * 1.1, 0, -(ROAD_HW + 2.6))
 		n.rotation.y = deg_to_rad(-60.0 + i * 140.0)
 		var ember := part(n, sphere(0.018), Vector3(0.22, 1.32, 0.18), glow(Color("ff6a1a"), 6.0))
@@ -1398,16 +1423,176 @@ func _greet() -> void:
 			p.say(lines[randi() % lines.size()], 3.5)
 
 
+# ================= Reactions to the player =================
+
+## People notice what you do: bump into them, stare, sneak up behind them, lie on the street.
+func _reactions(dt: float) -> void:
+	if not player or not is_instance_valid(player):
+		return
+	var pp: Vector3 = player.global_position
+	var cam: Camera3D = player.camera
+	var fwd := -cam.global_transform.basis.z
+	var hspeed := Vector2(player.velocity.x, player.velocity.z).length()
+	var people: Array = pedestrians.duplicate()
+	if _bouncer:
+		people.append(_bouncer)
+	for p: NPC in people:
+		if not p.visible:
+			continue
+		var to_p := p.global_position - pp
+		var d := to_p.length()
+		if d > 9.0:
+			_stare.erase(p.name)
+			continue
+		# bumped into
+		if d < 0.85 and hspeed > 1.0 and p.can_react("bump", 5.0):
+			p.face(pp)
+			p.react("hit", StreetTalk._pick(StreetTalk.BUMP), 2.2)
+			continue
+		# lying on the street
+		if player.posture == 2 and d < 3.5 and p.can_react("prone", 30.0):
+			p.face(pp)
+			p.react("interact", StreetTalk._pick(StreetTalk.PRONE), 4.0)
+			continue
+		# sneaking up behind them
+		if player.posture == 1 and d < 2.2:
+			var their_fwd := Vector3(sin(p.rotation.y), 0, cos(p.rotation.y))
+			if their_fwd.dot(-to_p.normalized()) < -0.3 and p.can_react("sneak", 25.0):
+				p.face(pp)
+				p.react("", StreetTalk._pick(StreetTalk.SNEAK), 3.0)
+				continue
+		# staring at them
+		var eye := (p.global_position + Vector3(0, 1.5, 0) - cam.global_position).normalized()
+		if fwd.dot(eye) > 0.993 and d < 8.0:
+			_stare[p.name] = float(_stare.get(p.name, 0.0)) + dt
+			if _stare[p.name] > 2.5 and p.can_react("stare", 20.0):
+				_stare[p.name] = 0.0
+				p.face(pp)
+				p.react("", StreetTalk._pick(StreetTalk.STARE), 3.0)
+		else:
+			_stare.erase(p.name)
+
+
+## The two smokers talk to each other.
+func _smoker_chat() -> void:
+	var smokers: Array[NPC] = []
+	for p in pedestrians:
+		if str(p.data.get("persona", "")) == "smoker" and p.visible:
+			smokers.append(p)
+	if smokers.size() < 2 or smokers[0].is_busy():
+		return
+	var pair: Array = StreetTalk.SMOKER_CHAT[_chat_i % StreetTalk.SMOKER_CHAT.size()]
+	_chat_i += 1
+	smokers[0].say(pair[0], 3.2)
+	get_tree().create_timer(3.4).timeout.connect(func():
+		if is_instance_valid(smokers[1]) and not smokers[1].is_busy():
+			smokers[1].say(pair[1], 3.2))
+
+
+# ================= Animals, steam, props, seats =================
+
+func _wildlife() -> void:
+	cat = StreetCat.new()
+	cat.name = "Cat"
+	add_child(cat)
+	cat.build()
+	cat.player = player
+	cat.spots = [Vector3(5.0, 0, -8.6), Vector3(-3.0, 0, -8.8), Vector3(CROSS_X - 8.0, 0, 18.0), Vector3(9.0, 0, -7.6)]
+	cat.position = cat.spots[0]
+	for spec in [[Vector3(-12.0, 0, 37.0), 7, 1.6], [Vector3(30.0, 0, 37.5), 6, 1.4], [Vector3(26.0, 0, 8.6), 5, 1.0]]:
+		var f := PigeonFlock.new()
+		add_child(f)
+		f.position = spec[0]
+		f.build(spec[1], spec[2])
+		flocks.append(f)
+
+
+func set_player(p: Node3D) -> void:
+	player = p
+	if cat:
+		cat.player = p
+	for f in flocks:
+		f.player = p
+
+
+## Steam rising from the manholes on a cold night.
+func _steam() -> void:
+	var qm := QuadMesh.new()
+	qm.size = Vector2(1.4, 1.4)
+	var m := StandardMaterial3D.new()
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	m.albedo_color = Color(0.8, 0.8, 0.85, 0.09)
+	m.roughness = 1.0
+	var g := Gradient.new()
+	g.set_color(0, Color(1, 1, 1, 1))
+	g.set_color(1, Color(1, 1, 1, 0))
+	var gt := GradientTexture2D.new()
+	gt.gradient = g
+	gt.fill = GradientTexture2D.FILL_RADIAL
+	gt.fill_from = Vector2(0.5, 0.5)
+	gt.fill_to = Vector2(1.0, 0.5)
+	m.albedo_texture = gt
+	qm.material = m
+	for x in [-22.0, 12.0]:
+		var s := GPUParticles3D.new()
+		s.amount = 10
+		s.lifetime = 4.5
+		var pm := ParticleProcessMaterial.new()
+		pm.direction = Vector3(0, 1, 0)
+		pm.spread = 12.0
+		pm.initial_velocity_min = 0.4
+		pm.initial_velocity_max = 0.8
+		pm.gravity = Vector3(0.15, 0.05, 0)
+		pm.scale_min = 0.6
+		pm.scale_max = 1.6
+		s.process_material = pm
+		s.draw_pass_1 = qm
+		s.position = Vector3(x, 0.1, 0.9)
+		s.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(s)
+
+
+## Things lying around that you can pick up and throw.
+func _loose_props() -> void:
+	var cols := [Color("c8ff3d"), Color("d42a2a"), Color("2a6ad4"), Color("e8e8e8")]
+	var spots := [Vector3(-20.0, 0.2, -9.1), Vector3(3.8, 0.2, -9.2), Vector3(7.5, 0.2, 9.3), Vector3(-48.0, 0.2, 8.9),
+		Vector3(CROSS_X - 8.6, 0.2, 20.0), Vector3(-30.0, 0.2, 38.6), Vector3(29.0, 0.2, 9.4)]
+	for i in spots.size():
+		var b: RigidBody3D = Props.bottle() if i % 3 == 2 else Props.can(cols[i % cols.size()])
+		b.position = spots[i]
+		b.rotation = Vector3(deg_to_rad(90.0) if i % 2 == 0 else 0.0, randf() * TAU, 0)
+		add_child(b)
+	var ball := Props.ball()
+	ball.position = Vector3(CROSS_X + 3.0, 0.3, 30.0)
+	add_child(ball)
+	for i in 2:
+		var c := Props.cone()
+		c.position = Vector3(X_MAX - 3.0, 0.4, -3.0 + i * 6.0)
+		add_child(c)
+
+
+## Benches you can sit on: [position, yaw the player faces].
+func _seats() -> void:
+	var specs := [[Vector3(-21.0, 0, -(ROAD_HW + 3.2)), PI], [Vector3(8.0, 0, ROAD_HW + 3.2), 0.0]]
+	for x in [-50.0, -30.0, 0.0, 34.0, 52.0]:
+		specs.append([Vector3(x, 0, WATER_Z - 1.4), PI])
+	for sp in specs:
+		var b := solid(Vector3(1.8, 0.5, 0.6), sp[0] + Vector3(0, 0.25, 0), "seat", "Sit down")
+		b.set_meta("yaw", sp[1])
+		seats.append(b)
+
+
 # ================= Pedestrians =================
 
 func _pedestrians() -> void:
 	var looks := [
-		{"model": "casual_female", "recolor": {}, "voice_hz": 230.0},
-		{"model": "worker_male", "recolor": {}, "voice_hz": 120.0},
-		{"model": "suit_female", "recolor": {}, "voice_hz": 210.0},
-		{"model": "casual_male", "recolor": {"LightBlue": Color("2e5e3a")}, "voice_hz": 130.0},
-		{"model": "hoodie_male", "recolor": {"Purple": Color("6b2020")}, "voice_hz": 140.0},
-		{"model": "worker_female", "recolor": {}, "voice_hz": 220.0},
+		{"model": "casual_female", "recolor": {}, "voice_hz": 230.0, "name": "Sanne", "persona": "student"},
+		{"model": "worker_male", "recolor": {}, "voice_hz": 120.0, "name": "Kees", "persona": "nightshift"},
+		{"model": "suit_female", "recolor": {}, "voice_hz": 210.0, "name": "Fatima", "persona": "business"},
+		{"model": "casual_male", "recolor": {"LightBlue": Color("2e5e3a")}, "voice_hz": 130.0, "name": "Jordy", "persona": "local"},
+		{"model": "hoodie_male", "recolor": {"Purple": Color("6b2020")}, "voice_hz": 140.0, "name": "Mo", "persona": "student"},
+		{"model": "worker_female", "recolor": {}, "voice_hz": 220.0, "name": "Ilse", "persona": "nightshift"},
 	]
 	var routes := [
 		[Vector3(-64, 0, -8.6), Vector3(-2, 0, -8.6)],

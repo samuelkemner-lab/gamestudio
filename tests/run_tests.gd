@@ -418,5 +418,80 @@ func _run() -> void:
 	check(sess.takes_left == int(Rappers.LIL_TEAR.patience) + 1 and int(gs.buffs.chill) == 0, "chill studio = one extra take")
 	sess._leave()
 
+	# ---------- v0.9: posture, poses, props, NPC interactions ----------
+	var pl = main.player
+	check(pl.set_posture(1) and pl.posture == 1 and pl._cap.height < 1.5, "crouch shrinks the collider")
+	check(pl.set_posture(2) and pl.posture == 2, "go prone")
+	check(pl.set_posture(0) and pl.posture == 0, "stand up again")
+	main._on_interacted(main.room.find_children("*", "StaticBody3D", true, false).filter(func(b): return b.get_meta("interact", "") == "chair")[0])
+	check(pl.pose == "seat", "sit on the desk chair")
+	pl.leave_pose()
+	check(pl.pose == "", "stand up from the chair")
+	var bed = main.room.find_children("*", "StaticBody3D", true, false).filter(func(b): return b.get_meta("interact", "") == "bed")[0]
+	sess.state = Session.State.IDLE
+	main.results.visible = false
+	main._set_ui_mode(false)
+	main._on_interacted(bed)
+	check(pl.pose == "bed" and not main.results.visible, "lie down on the bed (no instant sleep)")
+	var day0 := gs.day
+	main._on_interact_empty()
+	check(gs.day == day0 + 1 and pl.pose == "", "[E] in bed sleeps")
+	main.results.visible = false
+	main._set_ui_mode(false)
+	var sw = main.room.find_children("*", "StaticBody3D", true, false).filter(func(b): return b.get_meta("interact", "") == "switch")[0]
+	main._on_interacted(sw)
+	check(not main.room.lights_on and not main.room.led_lights[0].visible, "light switch turns the LEDs off")
+	main._on_interacted(sw)
+	check(main.room.lights_on, "and on again")
+	var grabs = main.room.find_children("*", "RigidBody3D", true, false).filter(func(b): return b.get_meta("interact", "") == "grab")
+	check(grabs.size() >= 4, "loose props in the room (%d)" % grabs.size())
+	pl.pick_up(grabs[0])
+	check(pl.held == grabs[0], "pick up a can")
+	pl.drop_held()
+	check(pl.held == null, "drop it")
+	# street
+	main.travel(true)
+	check(main.player.surface in ["stone", "wet"], "footsteps sound like the street outside")
+	var ped: NPC = city.pedestrians[0]
+	check(ped.display_name != "" and ped.body.get_meta("interact") == "npc", "pedestrians have names and can be talked to")
+	main._on_interacted(ped.body)
+	check(main.talk_ui.visible and not main.player.enabled, "talk menu opens")
+	main.talk_ui.choose("talk")
+	check(not main.talk_ui.visible and int(ped.memory.talks) == 1, "NPC remembers you talked")
+	var rep0 := gs.reputation
+	main._on_interacted(ped.body)
+	main.talk_ui.choose("flyer")
+	check(ped.memory.flyer and gs.reputation >= rep0, "flyer handed out")
+	check(StreetTalk.flyer(ped, gs)[1] == 0 and int(ped.memory.annoyed) == 1, "second flyer annoys them")
+	main._on_interacted(ped.body)
+	main.talk_ui.close()
+	check(main.player.enabled, "leaving the talk gives control back")
+	check(city.cat != null and city.cat.body.get_meta("interact") == "cat", "a street cat lives on the Zuidkade")
+	gs.buffs.chill = 0
+	main._on_interacted(city.cat.body)
+	check(int(gs.buffs.chill) == 1 and city.cat.state == "petted", "petting the cat calms you (+1 take)")
+	check(city.flocks.size() >= 2, "pigeons on the quay")
+	var fl: PigeonFlock = city.flocks[0]
+	fl.scare()
+	check(fl._away > 0.0, "pigeons fly off when scared")
+	check(city.seats.size() >= 5, "benches to sit on")
+	main._on_interacted(city.seats[0])
+	check(pl.pose == "seat", "sit on a bench")
+	pl.leave_pose()
+	main.travel(false)
+	# rapper: hype + drink
+	gs.reset()
+	sess.book(Rappers.LIL_TEAR)
+	sess.state = Session.State.WAITING
+	var takes0 := sess.takes_left
+	main._on_interacted(sess.npc.body)
+	check(main.talk_ui.visible, "talk to the rapper")
+	main.talk_ui.choose("drink")
+	check(sess.takes_left == takes0 + 1 and sess.drink_given, "a drink buys one more take")
+	main._on_interacted(sess.npc.body)
+	main.talk_ui.choose("hype")
+	check(sess.hype == 5, "hype the rapper up")
+	sess._leave()
+
 	print("RESULT: ", "PASS" if failures == 0 else "FAIL (%d)" % failures)
 	quit(failures)

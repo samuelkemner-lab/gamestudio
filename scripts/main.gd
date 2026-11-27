@@ -3,7 +3,7 @@ extends Node3D
 ## Title screen → bedroom studio → phone DMs → rapper session in the booth → rating & payout.
 
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
-const VERSION := "v0.8 prototype"
+const VERSION := "v0.9 prototype"
 const DAWN := 30 * 60  # 06:00 the next morning
 const BOOTH_LOOK := Vector3(1.45, 1.2, -1.6)
 const CITY_ORIGIN := Vector3(0, 0, 700)  # the street lives far away from the flat interior
@@ -21,6 +21,11 @@ var phone: PhoneUI
 var results: ResultsUI
 var city: CityBuilder
 var city_ui: CityUI
+var talk_ui: TalkUI
+var _talk_npc: NPC
+var _flyers_day := -1
+var _flyers_today := 0
+var _cat_day := -1
 var in_city := false
 var _monitor_vp: SubViewport
 var _fade: ColorRect
@@ -92,7 +97,8 @@ func _ready() -> void:
 	player.rotation.y = deg_to_rad(20)
 	add_child(player)
 	player.interacted.connect(_on_interacted)
-	city.player = player
+	player.interact_empty.connect(_on_interact_empty)
+	city.set_player(player)
 	city.game = game
 
 	_build_hud()
@@ -132,6 +138,12 @@ func _ready() -> void:
 	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	fade_layer.add_child(_fade)
+
+	talk_ui = TalkUI.new()
+	layer.add_child(talk_ui)
+	talk_ui.visible = false
+	talk_ui.chosen.connect(_on_talk_chosen)
+	talk_ui.closed.connect(_end_talk)
 
 	results = ResultsUI.new()
 	layer.add_child(results)
@@ -212,7 +224,7 @@ func _prompt_for(target: Object) -> String:
 
 
 func _ui_open() -> bool:
-	return loopr.visible or phone.visible or results.visible or city_ui.visible
+	return loopr.visible or phone.visible or results.visible or city_ui.visible or talk_ui.visible
 
 
 func _input(event: InputEvent) -> void:
@@ -288,10 +300,140 @@ func _on_interacted(target: Object) -> void:
 			else:
 				open_shop(id)
 		"bed":
-			if session.is_active():
-				show_toast("You can't sleep now, %s is still here." % session.rapper.get("name", "someone"))
+			player.enter_pose("bed", room.global_position + Vector3(1.56, 0.3, 1.05), PI, 0.55, 1.3)
+			show_toast("[E] sleep (end the night)   ·   [SPACE] get up")
+		"chair":
+			player.enter_pose("seat", room.global_position + Vector3(-0.66, 0.05, -1.4), 0.0, 1.12, -0.15)
+			show_toast("[E] on the PC to open LOOPR   ·   [SPACE] stand up")
+		"seat":
+			var body := target as Node3D
+			player.enter_pose("seat", body.global_position, float(target.get_meta("yaw", 0.0)), 0.95)
+			show_toast("[SPACE] stand up")
+		"switch":
+			room.toggle_lights()
+			player._play_fx(AmbienceSynth.tick(1400.0))
+		"cat":
+			city.cat.pet()
+			if _cat_day != game.day:
+				_cat_day = game.day
+				game.add_buff("chill", 1)
+				show_toast("The cat purrs. You feel calmer.  (+1 take with your next rapper)")
+		"npc":
+			var n: NPC = target.get_meta("npc")
+			if session.npc and n == session.npc:
+				_talk_rapper()
+			elif n.display_name == "":
+				n.face(player.global_position)
+				n.say("Move along. Nothing to see here.", 3.0)
 			else:
-				go_to_sleep()
+				_talk_pedestrian(n)
+
+
+func _on_interact_empty() -> void:
+	if player.pose == "bed":
+		if session.is_active():
+			show_toast("You can't sleep now, %s is still here." % session.rapper.get("name", "someone"))
+		else:
+			player.leave_pose()
+			go_to_sleep()
+
+
+# ---------- Talking to people ----------
+
+func _talk_pedestrian(n: NPC) -> void:
+	_talk_npc = n
+	n.pause_route(60.0)
+	n.face(player.global_position)
+	n.play("idle")
+	var sub := "%s  ·  %s" % [str(n.data.get("persona", "local")).capitalize(), "knows you" if int(n.memory.talks) > 0 else "stranger"]
+	talk_ui.open(n.display_name, sub, [
+		["Talk", "talk"],
+		["Hand out a flyer", "flyer", not n.memory.flyer],
+		["Play your latest track", "track"],
+		["Dap them up", "dap", not n.memory.dapped],
+	])
+	_set_ui_mode(true)
+
+
+func _talk_rapper() -> void:
+	var r := session.rapper
+	if session.state == Session.State.RECORDING:
+		session.npc.say("Shh! I'm recording!", 2.0)
+		return
+	if not session.state in [Session.State.WAITING, Session.State.REVIEW]:
+		return
+	_talk_npc = session.npc
+	talk_ui.open(str(r.name), "%s  ·  %d takes left" % [str(r.style), session.takes_left], [
+		["What do you want on this beat?", "brief"],
+		["Hype them up  (+5 on next take)", "hype", session.hype == 0],
+		["Offer a drink  (+1 take)", "drink", not session.drink_given],
+		["Small talk", "chat"],
+	])
+	_set_ui_mode(true)
+
+
+func _on_talk_chosen(id: String) -> void:
+	var n := _talk_npc
+	_set_ui_mode(false)
+	if n == null:
+		return
+	if n == session.npc:
+		match id:
+			"brief":
+				n.say(str(session.rapper.brief_pro).trim_prefix("\"").trim_suffix("\""), 5.0)
+			"hype":
+				session.hype = 5
+				n.play("wave")
+				n.say(StreetTalk._pick(["Yeah, YEAH! Let's go!", "You right, this one's the one.", "Okay okay, I feel it now."]), 3.0)
+			"drink":
+				session.drink_given = true
+				session.takes_left += 1
+				n.say(StreetTalk._pick(["Ah, thanks man. Okay, one more take then.", "Cheers. I'm good for another one.", "That's what I needed."]), 3.0)
+				show_toast("+1 take (%d left)" % session.takes_left)
+			"chat":
+				n.say(StreetTalk.rapper_chat(session.rapper), 4.5)
+		_talk_npc = null
+		return
+	match id:
+		"talk":
+			n.say(StreetTalk.greet(n, game, game.weather, game.minutes), 4.0)
+		"flyer":
+			if _flyers_day != game.day:
+				_flyers_day = game.day
+				_flyers_today = 0
+			var res: Array = StreetTalk.flyer(n, game)
+			n.say(res[0], 4.0)
+			var rep := int(res[1]) if _flyers_today < 5 else 0
+			_flyers_today += 1
+			if rep > 0 or bool(res[2]):
+				game.add(0, rep, 0)
+				show_toast("+%d REP%s" % [rep, "  ·  a new rapper might DM you" if res[2] else ""])
+		"track":
+			var t: Array = StreetTalk.play_track(n, game)
+			n.say(t[0], 4.0)
+			match str(t[1]):
+				"love":
+					n.dance(5.0)
+				"bad":
+					n.react("hit", "", 1.5)
+			if int(t[2]) > 0:
+				game.add(0, int(t[2]), 0)
+				show_toast("+%d REP" % int(t[2]))
+		"dap":
+			var line := StreetTalk.dap(n)
+			n.say(line, 2.5)
+			if n.memory.dapped:
+				n.dap()
+				player._play_fx(AmbienceSynth.tick(900.0))
+	n.pause_route(4.5)
+	_talk_npc = null
+
+
+func _end_talk() -> void:
+	_set_ui_mode(false)
+	if _talk_npc and _talk_npc != session.npc:
+		_talk_npc.pause_route(1.0)
+	_talk_npc = null
 
 
 # ---------- Outside world ----------
@@ -307,6 +449,8 @@ func _set_city_active(on: bool) -> void:
 	# indoor and outdoor each have their own light / post setup
 	room.world_env.environment = city.city_env if on else room.room_env
 	room.world_env.camera_attributes = city.cam_attr if on else null
+	if player:
+		player.surface = ("wet" if game.weather == "rain" else "stone") if on else "wood"
 	if on:
 		city.apply_weather(game.weather)
 		city.update_hours(game.minutes)

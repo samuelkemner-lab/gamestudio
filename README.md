@@ -12,12 +12,18 @@ Een studio-producer-sim: je begint als wannabe SoundCloud-producer in je slaapka
 | Toets | Actie |
 | --- | --- |
 | WASD + muis | Lopen en rondkijken |
-| E | Interactie: monitor = LOOPR, microfoon = praat met de rapper, bed = slapen, deur = naar buiten, winkeldeuren = naar binnen |
+| Shift | Sprinten |
+| Ctrl (vasthouden) / C (aan-uit) | Bukken (langzamer, stiller, vignet aan de randen) |
+| Z | Liggen (plat op de grond); SPATIE = stap voor stap weer opstaan |
+| SPATIE | Springen / opstaan / van stoel of bed af |
+| F | Zaklamp |
+| E | Interactie: monitor = LOOPR, stoel = zitten, bed = liggen (nog een keer E = slapen), lichtknop, deur, winkels, mensen aanspreken, kat aaien, bankjes. Losse spullen (blikjes, fles, bal, doos) oppakken / neerleggen |
+| Linkermuis / rechtermuis | Opgepakt voorwerp gooien / neerleggen |
+| 1–4 | Keuze in een gesprek (of pattern A–D in LOOPR) |
 | TAB | Telefoon: DM's (boeken), Shop, Tracks (streams), hints Easy/Pro |
 | Ctrl+S | Project opslaan in LOOPR (beschermt tegen een pc-crash) |
 | Ctrl+Z | Ongedaan maken in LOOPR |
 | F9 | Grafische kwaliteit High/Low (Low = sneller op zwakke pc's) |
-| 1–4 | Pattern A–D kiezen in LOOPR |
 | SPATIE | Beat afspelen/stoppen (in LOOPR) |
 | ESC | LOOPR sluiten / muis vrijgeven |
 
@@ -30,6 +36,17 @@ Vereist een videokaart met Vulkan-ondersteuning; dat heeft vrijwel elke pc van n
 4. Klik **RECORD TAKE**. De rapper rapt twee maten en geeft een oordeel (1–5 sterren). Elke retake kost geduld.
 5. Klik **FINISH** om de beste take uit te brengen. Je krijgt geld, reputatie en Street Cred.
 6. Pas op met het volume: de geluidsmeter loopt op. Bij 100% belt de buurman de politie (€40 boete).
+
+## In v0.9: details en NPC-interacties
+- **Houdingen:** sprinten (FOV wordt breder), bukken (Ctrl/C) en liggen (Z) met een donker vignet, hoofd-ruimtecheck (je kunt niet opstaan onder een tafel), voetstappen per ondergrond (hout, steen, nat), landingsdip en -geluid, zaklamp.
+- **Zitten en liggen:** op de bureaustoel achter de pc, op bankjes op straat en aan de kade, op bed liggen (naar het plafond kijken; E = slapen).
+- **Physics-props:** blikjes, fles, doos, bal en pionnen oppakken en gooien, met tikgeluid. Raak je iemand, dan wordt die boos en onthoudt dat.
+- **Kamer:** lichtknop bij de deur zet de ledstrips uit en aan.
+- **Voetgangers hebben een naam en een persona** (student, nachtdienst, zakenvrouw, local, roker, uitsmijter). Gespreksmenu: praten, flyer uitdelen (+REP, max. 5 per nacht, soms DM't er een rapper), je laatste track laten horen (bij 4+ sterren gaan ze dansen), dappen. Ze onthouden of ze je kennen, of je ze al een flyer gaf en of je irritant was.
+- **Reacties:** botsen ("Hé, watch where you're going!"), staren (na 2,5 s), achter iemand sluipen, op straat liggen ("Should I call 112?"), geraakt worden door een blikje. Rokers voor de deur praten met elkaar; bij regen rennen voetgangers.
+- **Rappers in de studio:** praat ermee voor de brief, hype ze op (+5 punten op de volgende take), geef ze iets te drinken (+1 take, één keer per sessie) of small talk per stijl.
+- **Dieren:** een zwerfkat bij de snackbar (vlucht als je rent, komt naar je toe als je bukt; aaien = één keer per nacht +1 take), duiven op de kade die opvliegen als je te dichtbij komt.
+- **Straat:** stoom uit de putten, losse blikjes en flessen.
 
 ## In v0.8: realisme 2.0
 - Nieuwe belichting buiten: filmische kleuren, lichtterugkaatsing, natte straten die neon en lantaarns spiegelen, mist, gemengde natrium- en LED-lantaarns, licht uit etalages op de stoep, koplampen

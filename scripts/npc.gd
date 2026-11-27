@@ -15,6 +15,9 @@ const ANIM := {
 	"yes": "CharacterArmature|Wave",
 	"no": "CharacterArmature|HitRecieve",
 	"interact": "CharacterArmature|Interact",
+	"run": "CharacterArmature|Run",
+	"hit": "CharacterArmature|HitRecieve_2",
+	"dap": "CharacterArmature|Punch_Right",
 }
 
 var data: Dictionary
@@ -30,6 +33,14 @@ var _babble_timer := 0.0
 var _bob := false
 var _t := 0.0
 var _model: Node3D
+var body: StaticBody3D  # what the player's ray hits / bumps into
+var display_name := ""
+var memory := {"talks": 0, "flyer": false, "heard_track": false, "annoyed": 0, "dapped": false}
+var walk_anim := "walk"
+var _paused_path: Array[Vector3] = []
+var _paused := 0.0
+var _dance := 0.0
+var _react_cd := {}
 
 
 func setup(d: Dictionary) -> void:
@@ -69,6 +80,20 @@ func setup(d: Dictionary) -> void:
 	add_child(voice)
 	_syllables = VoiceSynth.bank(d.get("voice_hz", 140.0))
 	play("idle")
+	display_name = str(d.get("name", ""))
+	body = StaticBody3D.new()
+	body.name = "Body"
+	var col := CollisionShape3D.new()
+	var cap := CapsuleShape3D.new()
+	cap.radius = 0.28
+	cap.height = 1.75
+	col.shape = cap
+	col.position.y = 0.88
+	body.add_child(col)
+	body.set_meta("interact", str(d.get("interact", "npc")))
+	body.set_meta("label", "Talk to %s" % display_name if display_name != "" else "Talk")
+	body.set_meta("npc", self)
+	add_child(body)
 
 
 func _recolor_clothes(map: Dictionary) -> void:
@@ -194,7 +219,60 @@ func play(name: String) -> void:
 
 func walk_path(points: Array[Vector3]) -> void:
 	_path = points.duplicate()
-	play("walk")
+	play(walk_anim)
+
+
+## Stop walking for a moment (to talk, to look at you), then carry on where they were going.
+func pause_route(seconds: float) -> void:
+	if not _path.is_empty():
+		_paused_path = _path.duplicate()
+		_path.clear()
+	_paused = maxf(_paused, seconds)
+	if _dance <= 0.0:
+		play("idle")
+
+
+func resume_route() -> void:
+	_paused = 0.0
+	if not _paused_path.is_empty():
+		_path = _paused_path.duplicate()
+		_paused_path.clear()
+		play(walk_anim)
+
+
+func is_busy() -> bool:
+	return _paused > 0.0
+
+
+## Cooldown helper for reactions: true if `kind` may fire now.
+func can_react(kind: String, cooldown: float) -> bool:
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - float(_react_cd.get(kind, -999.0)) < cooldown:
+		return false
+	_react_cd[kind] = now
+	return true
+
+
+## Short reaction: an animation + a line, and a short stop.
+func react(anim_key: String, line: String, stop := 2.5) -> void:
+	pause_route(stop)
+	if anim_key != "":
+		play(anim_key)
+	if line != "":
+		say(line, maxf(stop, 2.5))
+
+
+func dance(seconds: float) -> void:
+	pause_route(seconds)
+	_dance = seconds
+	play("wave")
+
+
+## Fist bump: reach out with the right hand, slowly.
+func dap() -> void:
+	pause_route(2.0)
+	if anim.has_animation(ANIM["dap"]):
+		anim.play(ANIM["dap"], 0.15, 0.55)
 
 
 func is_walking() -> bool:
@@ -232,6 +310,18 @@ func rap_syllable() -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	if _paused > 0.0:
+		_paused -= delta
+		if _paused <= 0.0:
+			resume_route()
+	if _dance > 0.0:
+		_dance -= delta
+		_model.position.y = absf(sin(_t * 9.0)) * 0.08
+		_model.rotation.y = sin(_t * 4.5) * 0.35
+		if _dance <= 0.0:
+			_model.position.y = 0.0
+			_model.rotation.y = 0.0
+			play("idle")
 	if not _path.is_empty():
 		var target := _path[0]
 		var to := target - global_position
@@ -241,11 +331,15 @@ func _process(delta: float) -> void:
 			if _path.is_empty():
 				play("idle")
 				arrived.emit()
+		elif anim.current_animation != ANIM.get(walk_anim, ""):
+			play(walk_anim)
 		else:
 			var step := to.normalized() * speed * delta
 			global_position += step if step.length() < to.length() else to
 			rotation.y = lerp_angle(rotation.y, atan2(to.x, to.z), 10.0 * delta)
-	if _bob:
+	if _dance > 0.0:
+		pass
+	elif _bob:
 		_model.position.y = absf(sin(_t * 7.3)) * 0.025
 		_model.rotation.y = sin(_t * 3.6) * 0.12
 	else:

@@ -46,7 +46,8 @@ Lees **docs/LOOPR_DAW_MASTERPROMPT.md** vóór elke taak aan LOOPR. Richting: Ba
   - R4/R5: `HOURS` + rolluiken (`update_hours`), weer per nacht (`game_state.weather`, `city.apply_weather`), tram/rails/bovenleiding, verkeerslicht, rokers, herkenning bij ≥10 REP, `scripts/ambience_synth.gd` (regen, stad, water, trambel)
   - Screenshots met SDFGI zijn traag op lavapipe (±3 min per shot): render losse views met `tests/screenshot.gd -- <dir> city_street city_shops ...`
 - `tools/inspect_scene.gd`, `tools/contact_sheet.gd`: maten en materialen van modellen bekijken
-- `scripts/player.gd`: first-person controller, [E] interactie via de `interact`-meta
+- `scripts/player.gd`: first-person controller, [E] interactie via de `interact`-meta. Houdingen `Posture` STAND/CROUCH/PRONE (Ctrl/C, Z), sprint, `surface`-voetstappen, zaklamp (F), `enter_pose("seat"|"bed")`/`leave_pose()`, oppakken/gooien van RigidBodies met meta `interact = "grab"`; signaal `interact_empty` (E op niets, bv. in bed = slapen)
+- v0.9 details: `scripts/props.gd` (physics-props), `scripts/street_talk.gd` (alle straatteksten per persona + geheugen), `scripts/talk_ui.gd` (gespreksmenu, toetsen 1–4), `scripts/street_cat.gd`, `scripts/pigeon_flock.gd`. NPC's hebben `display_name`, `memory`, een StaticBody `body` met meta `interact = "npc"` en `npc = self`; reacties in `city_builder._reactions()`. Backlog met onderzochte ideeën: docs/DETAILS_BACKLOG.md
 - `scripts/rappers.gd`: rapperdata (smaak, feel, mix, geduld, brief, teksten); `scripts/judge.gd`: score 0–100 (BPM 20, drums 25, melodie 15, signature 15, feel 10, mix 15, clipping −6) → sterren + beloning
 - `scripts/session.gd`: sessie-state machine (ARRIVING → WAITING → RECORDING → REVIEW → LEAVING)
 - `scripts/npc.gd`: Kenney Mini Character + accessoires, lopen, animaties, tekstballon, brabbelstem (`voice_synth.gd`)

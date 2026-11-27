@@ -27,6 +27,8 @@ var takes_done := 0
 var best := {}
 var last := {}
 var easy_mode := true
+var hype := 0  # bonus points on the next take (you hyped the rapper up)
+var drink_given := false
 
 var _world: Node3D
 var _seq: Sequencer
@@ -73,6 +75,8 @@ func book(r: Dictionary) -> void:
 		takes_left += 1  # a chill studio: one extra take before they lose it
 		_gs.buffs.chill = 0
 	takes_done = 0
+	hype = 0
+	drink_given = false
 	best = {}
 	last = {}
 	npc = NPC.new()
@@ -125,6 +129,10 @@ func end_take() -> void:
 	_seq.stop()
 	npc.set_rapping(false)
 	last = Judge.evaluate(_seq, rapper, _gs.upgrades)
+	if hype > 0:
+		last.score = mini(int(last.score) + hype, 100)
+		last.stars = Judge.stars_for(int(last.score))
+		hype = 0
 	if best.is_empty() or last.score > best.score:
 		best = last
 	var stars: int = last.stars

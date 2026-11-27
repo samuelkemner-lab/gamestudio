@@ -72,12 +72,38 @@ func build() -> void:
 	_floor_clutter()
 	_lighting()
 	_street_sweep()
+	_switch_and_props()
 	_dust()
 	_upgrade_props()
 
 
+var led_lights: Array[Light3D] = []
+var led_mats: Array[StandardMaterial3D] = []
+var lights_on := true
 var _sweep: SpotLight3D
 var _sweep_t := 6.0
+
+
+## Light switch by the door (LED strips on/off) and things to pick up and throw around.
+func _switch_and_props() -> void:
+	part(self, box(Vector3(0.08, 0.12, 0.015)), Vector3(-0.55, 1.25, 2.585), mat(Color("e8e4da"), 0.5, ""))
+	part(self, box(Vector3(0.03, 0.05, 0.02)), Vector3(-0.55, 1.25, 2.575), mat(Color("d0ccc2"), 0.5, ""))
+	solid(Vector3(0.2, 0.2, 0.1), Vector3(-0.55, 1.25, 2.54), "switch", "Light switch")
+	var spots := [[Props.can(Color("c8ff3d")), Vector3(-0.2, 0.8, -1.95)], [Props.can(Color("ff3d7f")), Vector3(0.6, 0.1, 1.0)],
+		[Props.bottle(), Vector3(1.75, 0.95, 0.55)], [Props.box(Vector3(0.3, 0.22, 0.25), PAL.cardboard), Vector3(1.2, 0.15, 2.1)],
+		[Props.ball(), Vector3(-1.4, 0.2, 1.2)]]
+	for sp in spots:
+		var b: RigidBody3D = sp[0]
+		b.position = sp[1]
+		add_child(b)
+
+
+func toggle_lights() -> void:
+	lights_on = not lights_on
+	for l in led_lights:
+		l.visible = lights_on
+	for m in led_mats:
+		m.emission_energy_multiplier = float(m.get_meta("on_energy")) if lights_on else 0.0
 
 
 ## A car passes seven floors down: its headlights sweep across the ceiling.
@@ -376,9 +402,13 @@ func _shell() -> void:
 	text3d(shell, "RECORDING", Vector3(-1.2, 1.5, 2.553), Color("1a1a22"), 0.0011, Vector3(0, 180, 0), 0.0)
 
 	# Neon LED strips (light comes from _lighting)
-	part(shell, box(Vector3(4.2, 0.025, 0.03)), Vector3(0, 2.57, -2.58), glow(PAL.neon_purple, 5.0))
-	part(shell, box(Vector3(0.03, 0.025, 5.2)), Vector3(-2.08, 2.57, 0), glow(PAL.neon_cyan, 4.0))
-	part(shell, box(Vector3(0.03, 0.025, 2.4)), Vector3(2.08, 2.57, 1.4), glow(PAL.neon_purple, 5.0))
+	for spec in [[Vector3(4.2, 0.025, 0.03), Vector3(0, 2.57, -2.58), PAL.neon_purple, 5.0],
+			[Vector3(0.03, 0.025, 5.2), Vector3(-2.08, 2.57, 0), PAL.neon_cyan, 4.0],
+			[Vector3(0.03, 0.025, 2.4), Vector3(2.08, 2.57, 1.4), PAL.neon_purple, 5.0]]:
+		var lm := glow(spec[2], spec[3])
+		lm.set_meta("on_energy", spec[3])
+		led_mats.append(lm)
+		part(shell, box(spec[0]), spec[1], lm)
 
 	# Rug + ceiling fan
 	kit(shell, "rugRounded", Vector3(0.05, 0, 0.35), 90, 1.8, {
@@ -604,6 +634,7 @@ func _chair() -> void:
 	var hoodie := mat(Color("55526a"), 1.0, "fabric", 6.0)
 	part(c, box(Vector3(0.5, 0.28, 0.06)), Vector3(0, 1.08, -0.24), hoodie, Vector3(15, 0, 4))
 	part(c, capsule(0.05, 0.4), Vector3(0.2, 0.86, -0.27), hoodie, Vector3(0, 0, 8))
+	solid(Vector3(0.5, 0.55, 0.5), Vector3(-0.66, 0.28, -1.45), "chair", "Sit down")
 
 
 # ================= Booth corner =================
@@ -671,7 +702,7 @@ func _bed_area() -> void:
 		"carpetWhite": mat(PAL.sheet, 1.0, "fabric", 5.0),
 	})
 	var bs: Vector3 = bed.get_meta("size")
-	solid(Vector3(bs.x, 0.5, bs.z), Vector3(1.56, 0.25, 1.6), "bed", "Sleep (end the night)")
+	solid(Vector3(bs.x, 0.5, bs.z), Vector3(1.56, 0.25, 1.6), "bed", "Lie down")
 	# Extra pillow + phone with screen on
 	kit(b, "pillowLong", Vector3(1.5, 0.48, 0.92), 8, 1.5, {"carpet": mat(PAL.pop.darkened(0.45), 1.0, "fabric", 5.0)})
 	part(b, box(Vector3(0.075, 0.01, 0.15)), Vector3(1.35, 0.53, 1.7), mat(PAL.plastic_black, 0.3, ""), Vector3(0, 25, 0))
@@ -936,3 +967,5 @@ func _lighting() -> void:
 		l.omni_range = spec[3]
 		l.shadow_enabled = spec[4]
 		add_child(l)
+		if led_lights.size() < 3:
+			led_lights.append(l)

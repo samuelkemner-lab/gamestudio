@@ -26,12 +26,16 @@ Lees **docs/ART_DIRECTION.md** (de masterprompt) vóór elke visuele taak en toe
 - Geen FL Studio-naam, -logo of -interface kopiëren. De DAW heet LOOPR en heeft een eigen look.
 - Alleen eigen of commercieel gelicenseerde audio. Placeholder-drums worden in code gegenereerd (`scripts/drum_synth.gd`).
 - Geen betaalde diensten (zoals AI-stemmen) zonder akkoord van Sam en een kostenoverzicht.
-- Gratis assets: Kenney.nl en Quaternius (CC0).
+- Gratis assets: Kenney.nl en Quaternius (CC0). Kenney-sites zijn hier geblokkeerd; CC0-kits zijn op te halen uit openbare GitHub-repo's (sparse checkout), altijd met licentiecheck. Credits bijwerken in CREDITS.md.
+- Kenney-meubels: schaal ~2.0 (`S`), materialen herkleuren via de `remap`-dictionary (namen: wood, woodDark, metal, metalMedium, metalDark, carpet, carpetDarker, carpetWhite, plant, lamp, glass).
 - Kleine stappen: na elke stap tests draaien en committen.
 
 ## Structuur
-- `scenes/main.tscn` → `scripts/main.gd`: HUD, monitor-SubViewport (LOOPR live op scherm), openen en sluiten van LOOPR
-- `scripts/room_builder.gd`: de slaapkamerstudio (props, materialen, licht, skyline), volgens de art direction
+- `scenes/main.tscn` → `scripts/main.gd`: titelscherm, HUD met interactie-prompt, monitor-SubViewport (LOOPR live op scherm), openen en sluiten van LOOPR
+- `scripts/room_builder.gd`: de slaapkamerstudio. Kenney-modellen via `kit()` (gecentreerd, geschaald, herkleurd met het nachtpalet), eigen props, licht, stofdeeltjes en skyline
+- `assets/models/kenney_furniture`, `assets/models/kenney_city`: CC0-modellen (zie CREDITS.md)
+- `assets/shaders/night_building.gdshader`: Kenney-gebouwen 's nachts (donkere gevels, willekeurig verlichte ramen)
+- `tools/inspect_scene.gd`, `tools/contact_sheet.gd`: maten en materialen van modellen bekijken
 - `scripts/player.gd`: first-person controller, [E] interactie via de `interact`-meta
 - `scripts/sequencer.gd`: audiokern (16 stappen, een audio-bus per spoor, mixer-API)
 - `scripts/loopr_ui.gd`: LOOPR-interface (Channel Rack + Mixer)

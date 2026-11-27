@@ -1,6 +1,16 @@
 extends SceneTree
-## Renders screenshots for visual checks (needs a display, e.g. xvfb-run).
-## godot --path . -s tests/screenshot.gd -- <out_dir>
+## Renders screenshots for visual checks (needs a display, e.g. xvfb-run + vulkan).
+## godot --path . --rendering-driver vulkan -s tests/screenshot.gd -- <out_dir> [shot names...]
+
+# [name, player position, yaw degrees, pitch degrees]
+const SHOTS := [
+	["room", Vector3(-1.3, 0.05, 2.1), -28.0, -14.0],
+	["desk", Vector3(-0.55, 0.05, -1.05), 8.0, -16.0],
+	["window", Vector3(0.2, 0.05, 0.6), -75.0, -6.0],
+	["bed", Vector3(-0.4, 0.05, -0.6), -128.0, -18.0],
+	["corner", Vector3(1.2, 0.05, -0.4), 150.0, -14.0],
+	["booth", Vector3(0.3, 0.05, 0.2), -35.0, -4.0],
+]
 
 
 func _initialize() -> void:
@@ -20,40 +30,35 @@ func _run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() > 0:
 		out = args[0]
+	var only := args.slice(1)
 	root.size = Vector2i(1600, 900)
 	var main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
-	for i in 30:
+	for i in 40:
 		await process_frame
-
-	# View toward the desk
-	main.player.position = Vector3(-1.3, 0.05, 2.1)
-	main.player.rotation.y = deg_to_rad(-28)
-	main.player.camera.rotation.x = deg_to_rad(-14)
-	await _save(out + "/shot_room.png")
-
-	# Look at the monitor from the chair
-	main.player.position = Vector3(-0.55, 0.05, -1.05)
-	main.player.rotation.y = deg_to_rad(8)
-	main.player.camera.rotation.x = deg_to_rad(-16)
+	if only.size() == 0 or only.has("menu"):
+		await _save(out + "/shot_menu.png")
+	main.start_game()
 	main.sequencer.play()
-	for i in 5:
-		await physics_frame
-	await _save(out + "/shot_desk.png")
-
-	main.player.position = Vector3(0.2, 0.05, 0.6)
-	main.player.rotation.y = deg_to_rad(-75)
-	main.player.camera.rotation.x = deg_to_rad(-6)
-	for i in 5:
-		await physics_frame
-	await _save(out + "/shot_window.png")
-
-	main.open_loopr()
-	for i in 8:
+	for i in 10:
 		await process_frame
-	await _save(out + "/shot_loopr.png")
 
-	var tabs: TabContainer = main.loopr.find_children("*", "TabContainer", true, false)[0]
-	tabs.current_tab = 1
-	await _save(out + "/shot_mixer.png")
+	for s in SHOTS:
+		if only.size() > 0 and not only.has(s[0]):
+			continue
+		main.player.position = s[1]
+		main.player.rotation.y = deg_to_rad(s[2])
+		main.player.camera.rotation.x = deg_to_rad(s[3])
+		for i in 6:
+			await physics_frame
+		await _save(out + "/shot_%s.png" % s[0])
+
+	if only.size() == 0 or only.has("loopr"):
+		main.open_loopr()
+		for i in 8:
+			await process_frame
+		await _save(out + "/shot_loopr.png")
+		var tabs: TabContainer = main.loopr.find_children("*", "TabContainer", true, false)[0]
+		tabs.current_tab = 1
+		await _save(out + "/shot_mixer.png")
 	quit()

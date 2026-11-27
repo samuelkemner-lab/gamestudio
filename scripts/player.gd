@@ -10,6 +10,7 @@ const GRAVITY := 9.8
 var enabled := true
 var camera: Camera3D
 var ray: RayCast3D
+var _bob_t := 0.0
 
 
 func _ready() -> void:
@@ -69,3 +70,11 @@ func _physics_process(delta: float) -> void:
 	velocity.x = dir.x * SPEED
 	velocity.z = dir.z * SPEED
 	move_and_slide()
+	# Subtle head bob while walking
+	var moving := dir.length() > 0.1 and is_on_floor()
+	if moving:
+		_bob_t += delta * 9.0
+	var target_y := 1.6 + (sin(_bob_t) * 0.03 if moving else 0.0)
+	var target_x := cos(_bob_t * 0.5) * 0.02 if moving else 0.0
+	camera.position.y = lerpf(camera.position.y, target_y, 12.0 * delta)
+	camera.position.x = lerpf(camera.position.x, target_x, 12.0 * delta)

@@ -1,4 +1,4 @@
-# Studio Grind (prototype v0.2)
+# Studio Grind (prototype v0.3)
 
 Een studio-producer-sim: je begint als wannabe SoundCloud-producer in je slaapkamer en bouwt beats in **LOOPR**.
 
@@ -17,6 +17,13 @@ Een studio-producer-sim: je begint als wannabe SoundCloud-producer in je slaapka
 | ESC | LOOPR sluiten / muis vrijgeven |
 
 Vereist een videokaart met Vulkan-ondersteuning; dat heeft vrijwel elke pc van na 2016.
+
+## In v0.3
+- Titelscherm met cinematische camera
+- Echte low-poly meubels (Kenney Furniture Kit, CC0), herkleurd naar het neon-nachtpalet
+- Nachtelijke skyline met verlichte ramen (Kenney City Kit, CC0, met eigen night-shader)
+- Stofdeeltjes, plafondventilator, nachtkastje met lamp, platenkast, kapstok, merchdozen
+- Head-bob tijdens lopen en een nieuwe interactie-prompt
 
 ## In v0.2
 - Uitgewerkte neon-slaapkamerstudio volgens `docs/ART_DIRECTION.md`: echte schaduwen, maanlicht door het raam, skyline, bureaulamp, booth-hoek en veel props

@@ -31,6 +31,7 @@ func _run() -> void:
 		check(AudioServer.get_bus_index(Sequencer.TRACKS[t]) != -1, "bus " + Sequencer.TRACKS[t])
 
 	# LOOPR opens and closes
+	check(not main.in_menu, "no title screen in headless mode")
 	main.open_loopr()
 	check(main.loopr.visible, "LOOPR opens")
 	check(not main.player.enabled, "player frozen while in LOOPR")

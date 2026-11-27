@@ -9,6 +9,8 @@
 | Retro Urban Kit (`assets/models/kenney_retro_urban`) | Kenney – www.kenney.nl | CC0 1.0 |
 | Ultimate Modular Men & Women (`assets/models/quaternius_characters`) | Quaternius – quaternius.com | CC0 1.0 |
 
-Kits obtained from the public CC0 mirror github.com/Tiddybub/3d-assets (each pack ships Kenney's own License.txt, copied next to the models).
+| PBR materials Asphalt031, PavingStones128/150, Bricks097/101, Concrete034/047A, Plaster001 (`assets/materials`) | ambientCG – ambientcg.com | CC0 1.0 |
+
+Kits and materials obtained from the public CC0 mirror github.com/Tiddybub/3d-assets (each pack ships Kenney's own License.txt, copied next to the models).
 
 All other models, materials, shaders, sounds and UI are made in code for Studio Grind.

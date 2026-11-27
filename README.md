@@ -1,4 +1,4 @@
-# Studio Grind (prototype v0.7)
+# Studio Grind (prototype v0.8)
 
 Een studio-producer-sim: je begint als wannabe SoundCloud-producer in je slaapkamer en bouwt beats in **LOOPR**.
 
@@ -16,6 +16,7 @@ Een studio-producer-sim: je begint als wannabe SoundCloud-producer in je slaapka
 | TAB | Telefoon: DM's (boeken), Shop, Tracks (streams), hints Easy/Pro |
 | Ctrl+S | Project opslaan in LOOPR (beschermt tegen een pc-crash) |
 | Ctrl+Z | Ongedaan maken in LOOPR |
+| F9 | Grafische kwaliteit High/Low (Low = sneller op zwakke pc's) |
 | 1–4 | Pattern A–D kiezen in LOOPR |
 | SPATIE | Beat afspelen/stoppen (in LOOPR) |
 | ESC | LOOPR sluiten / muis vrijgeven |
@@ -29,6 +30,17 @@ Vereist een videokaart met Vulkan-ondersteuning; dat heeft vrijwel elke pc van n
 4. Klik **RECORD TAKE**. De rapper rapt twee maten en geeft een oordeel (1–5 sterren). Elke retake kost geduld.
 5. Klik **FINISH** om de beste take uit te brengen. Je krijgt geld, reputatie en Street Cred.
 6. Pas op met het volume: de geluidsmeter loopt op. Bij 100% belt de buurman de politie (€40 boete).
+
+## In v0.8: realisme 2.0
+- Nieuwe belichting buiten: filmische kleuren, lichtterugkaatsing, natte straten die neon en lantaarns spiegelen, mist, gemengde natrium- en LED-lantaarns, licht uit etalages op de stoep, koplampen
+- Echte materialen (CC0): asfalt, stoeptegels, kasseien, baksteen, beton, stucwerk
+- Rotterdamse panden in plaats van speelgoedblokken: diepe kozijnen, kamers achter de ramen, regenpijpen, schoorstenen, dichte winkels met rolluik en graffiti
+- Vuil en slijtage: kauwgom, olievlekken, scheuren, putdeksels, roosters
+- Openingstijden: muziekwinkel tot 00:00, coffeeshop tot 01:00, snackbar tot 03:00
+- Weer per nacht: regen, mist of droog
+- Tram met rails en bovenleiding, verkeerslicht, verkeer rijdt rechts, rokers bij de snackbar; met genoeg REP herkennen mensen je
+- Stadsgeluid: regen, verkeer, water bij de kade, trambel
+- In je kamer zie je koplampen van auto's over het plafond glijden
 
 ## In v0.7: de buitenwereld (Zuidkade)
 - Loop via je voordeur naar buiten: een nachtelijke straat in een havenstad, met verkeer, voetgangers, fietsen, bushalte, een kade met de rivier, een tuibrug en een skyline

@@ -38,7 +38,13 @@ Lees **docs/LOOPR_DAW_MASTERPROMPT.md** vóór elke taak aan LOOPR. Richting: Ba
 - `scenes/main.tscn` → `scripts/main.gd`: titelscherm, HUD met interactie-prompt, monitor-SubViewport (LOOPR live op scherm), openen en sluiten van LOOPR
 - `scripts/room_builder.gd`: de slaapkamerstudio. Kenney-modellen via `kit()` (gecentreerd, geschaald, herkleurd met het nachtpalet), eigen props, licht, stofdeeltjes en skyline
 - `assets/models/kenney_furniture`, `kenney_city`, `kenney_roads`, `kenney_cars`, `kenney_retro_urban`: CC0-modellen (zie CREDITS.md). Bron voor extra Kenney-kits: github.com/Tiddybub/3d-assets (sparse checkout, `Models/GLB format`)
-- `assets/shaders/night_building.gdshader`: Kenney-gebouwen 's nachts (donkere gevels, willekeurig verlichte ramen)
+- `assets/shaders/night_building.gdshader`: Kenney-gebouwen 's nachts (achtergrondrijen; `per_building` = raamraster per gebouw)
+- Realisme (docs/REALISM_MASTERPROMPT.md):
+  - R1: buiten heeft een eigen `city.city_env` (AgX, SDFGI, SSR, auto-exposure, LUT, fog) die `main._set_city_active()` wisselt met `room.room_env`; F9 = kwaliteit Low/High; TAA aan
+  - R2: `assets/materials/<set>` (ambientCG 1K: Color/NormalGL/Roughness) via `city.pbr()` en `assets/shaders/wet_surface.gdshader` (world-space, `wetness`, plassen, `rain`-rimpels); `scripts/decal_kit.gd` = procedurele decals; `assets/shaders/kenney_tint.gdshader` = Kenney desatureren
+  - R3: gevels in `city_builder._facades()` (`NORTH_ROW`/`SOUTH_ROW`, stijlen `FACADE_STYLES`), ramen + kozijnen in MultiMeshes, `assets/shaders/interior_window.gdshader` (nep-kamers via interior mapping, INSTANCE_CUSTOM = seed)
+  - R4/R5: `HOURS` + rolluiken (`update_hours`), weer per nacht (`game_state.weather`, `city.apply_weather`), tram/rails/bovenleiding, verkeerslicht, rokers, herkenning bij ≥10 REP, `scripts/ambience_synth.gd` (regen, stad, water, trambel)
+  - Screenshots met SDFGI zijn traag op lavapipe (±3 min per shot): render losse views met `tests/screenshot.gd -- <dir> city_street city_shops ...`
 - `tools/inspect_scene.gd`, `tools/contact_sheet.gd`: maten en materialen van modellen bekijken
 - `scripts/player.gd`: first-person controller, [E] interactie via de `interact`-meta
 - `scripts/rappers.gd`: rapperdata (smaak, feel, mix, geduld, brief, teksten); `scripts/judge.gd`: score 0–100 (BPM 20, drums 25, melodie 15, signature 15, feel 10, mix 15, clipping −6) → sterren + beloning

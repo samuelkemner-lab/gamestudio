@@ -637,8 +637,8 @@ func _storefront(s: Dictionary) -> void:
 		# shop window: lit interior with a few silhouettes behind the glass
 		var ww := w * 0.56
 		var wx := -w * 0.19
-		var glass_m := glow(Color(s.glass).darkened(0.25), 0.2)
-		glass_m.albedo_color = Color(0.04, 0.05, 0.06)
+		var glass_m := glow(Color(s.glass).darkened(0.25), 0.07)
+		glass_m.albedo_color = Color(0.02, 0.025, 0.03)
 		glass_m.roughness = 0.05
 		part(g, box(Vector3(ww, 2.5, 0.05)), Vector3(wx, 1.6, 0.34), glass_m)
 		_shop_reg(str(s.id)).mats.append(glass_m)
@@ -1193,7 +1193,7 @@ func update_hours(minutes: int) -> void:
 		for l in st.lights:
 			(l as Light3D).visible = open
 		for m in st.mats:
-			(m as StandardMaterial3D).emission_energy_multiplier = (0.2 if open else 0.0)
+			(m as StandardMaterial3D).emission_energy_multiplier = (0.07 if open else 0.0)
 
 
 # ================= Weather & ambience (REALISM R5) =================

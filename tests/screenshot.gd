@@ -132,6 +132,53 @@ func _run() -> void:
 			await physics_frame
 		await _save(out + "/shot_cop.png")
 
+	if want.call("roll"):
+		var sq: Sequencer = main.sequencer
+		for i in 8:
+			sq.set_note(i * 2, [0, 3, 7, 10, 12, 10, 7, 3][i], true)
+		main.open_loopr()
+		var tabs2: TabContainer = main.loopr.find_children("*", "TabContainer", true, false)[0]
+		tabs2.current_tab = 1
+		await _save(out + "/shot_roll.png")
+		main.loopr.show_crash()
+		await _save(out + "/shot_crash.png")
+		main.loopr._crash.visible = false
+		tabs2.current_tab = 0
+		main.close_loopr()
+
+	if want.call("shop"):
+		main.game.money = 400
+		main.toggle_phone()
+		main.phone.tab = "shop"
+		main.phone._render()
+		await _save(out + "/shot_shop.png")
+		main.toggle_phone()
+
+	if want.call("upgrades"):
+		main.game.money = 5000
+		for it in Shop.ITEMS:
+			main.game.buy(it.id)
+		main.room.apply_upgrades(main.game.upgrades)
+		main.player.position = Vector3(-1.3, 0.05, 2.1)
+		main.player.rotation.y = deg_to_rad(-28)
+		main.player.camera.rotation.x = deg_to_rad(-12)
+		for i in 8:
+			await physics_frame
+		await _save(out + "/shot_upgrades.png")
+		main.player.position = Vector3(-0.2, 0.05, -0.2)
+		main.player.rotation.y = deg_to_rad(-95)
+		main.player.camera.rotation.x = deg_to_rad(-4)
+		for i in 8:
+			await physics_frame
+		await _save(out + "/shot_neon.png")
+
+	if want.call("night"):
+		main.game.record_track("lil_tear", 4, 82)
+		main.go_to_sleep()
+		await _save(out + "/shot_night.png")
+		main.results.visible = false
+		main._set_ui_mode(false)
+
 	if only.size() == 0 or only.has("loopr"):
 		main.open_loopr()
 		for i in 8:

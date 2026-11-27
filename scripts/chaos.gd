@@ -4,6 +4,7 @@ extends Node
 
 signal toast(text: String)
 signal police_visit(fine: int)
+signal pc_crash
 
 const WARN_AT := 60.0
 const POLICE_AT := 100.0
@@ -18,6 +19,9 @@ var _warned := false
 var _cop: NPC
 var _thump: AudioStreamPlayer
 var enabled := true
+var crashes_enabled := true
+var _edits_unsaved := 0
+var _restoring := false
 
 
 func setup(world: Node3D, seq: Sequencer, gs: GameState) -> void:
@@ -28,6 +32,28 @@ func setup(world: Node3D, seq: Sequencer, gs: GameState) -> void:
 	_thump.stream = VoiceSynth.thump()
 	_thump.volume_db = 4.0
 	add_child(_thump)
+	seq.pattern_changed.connect(_on_edit)
+
+
+## Old laptop: the longer you work without saving, the likelier LOOPR crashes.
+func _on_edit() -> void:
+	if _restoring or not enabled or not crashes_enabled:
+		return
+	if not _seq.dirty:
+		_edits_unsaved = 0
+		return
+	_edits_unsaved += 1
+	if _edits_unsaved >= 14 and randf() < 0.025:
+		crash()
+
+
+func crash() -> void:
+	_restoring = true
+	_seq.stop()
+	_seq.restore_saved()
+	_restoring = false
+	_edits_unsaved = 0
+	pc_crash.emit()
 
 
 func _process(delta: float) -> void:
@@ -35,7 +61,8 @@ func _process(delta: float) -> void:
 		return
 	var master := 0.0 if AudioServer.is_bus_mute(0) else _seq.get_volume(0)
 	if _seq.playing and master > 0.3:
-		_gs.noise = minf(_gs.noise + RISE * master * master * delta, POLICE_AT)
+		var rise := RISE * (0.6 if _gs.has("foam") else 1.0)
+		_gs.noise = minf(_gs.noise + rise * master * master * delta, POLICE_AT)
 	else:
 		_gs.noise = maxf(_gs.noise - FALL * delta, 0.0)
 	if _gs.noise >= WARN_AT and not _warned:

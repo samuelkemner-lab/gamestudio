@@ -28,13 +28,13 @@ func _run() -> void:
 	var cols := 6
 	var spacing := 2.2
 	for i in names.size():
-		var ps: PackedScene = load("res://assets/models/kenney_furniture/%s.glb" % names[i])
+		var ps: PackedScene = load(names[i] if names[i].begins_with("res://") else "res://assets/models/kenney_furniture/%s.glb" % names[i])
 		var inst: Node3D = ps.instantiate()
-		inst.scale = Vector3.ONE * 2.0
+		inst.scale = Vector3.ONE * (1.0 if names[i].begins_with("res://") else 2.0)
 		inst.position = Vector3((i % cols) * spacing, 0, (i / cols) * spacing)
 		world.add_child(inst)
 		var lbl := Label3D.new()
-		lbl.text = names[i]
+		lbl.text = names[i].get_file()
 		lbl.font_size = 48
 		lbl.pixel_size = 0.004
 		lbl.position = inst.position + Vector3(0.5, 0.05, 0.9)

@@ -16,6 +16,7 @@ const FLOWS := {
 	"Boom bap": [0, 2, 3, 4, 6, 8, 10, 11, 12, 14],
 	"Emo / autotune": [0, 3, 6, 8, 11, 14],
 	"Drill": [0, 1, 3, 4, 6, 7, 9, 10, 12, 13, 15],
+	"Rage": [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14],
 }
 
 var state := State.IDLE
@@ -55,13 +56,18 @@ func is_active() -> bool:
 
 
 func can_book(r: Dictionary) -> bool:
-	return state == State.IDLE and _gs.street_cred >= int(r.min_cred)
+	return state == State.IDLE and unlocked(r) and not r.id in _gs.booked_today
+
+
+func unlocked(r: Dictionary) -> bool:
+	return _gs.street_cred >= int(r.get("min_cred", 0)) and _gs.reputation >= int(r.get("min_rep", 0))
 
 
 func book(r: Dictionary) -> void:
 	if not can_book(r):
 		return
 	rapper = r
+	_gs.booked_today.append(r.id)
 	takes_left = int(r.patience)
 	takes_done = 0
 	best = {}
@@ -114,18 +120,18 @@ func end_take() -> void:
 		return
 	_seq.stop()
 	npc.set_rapping(false)
-	last = Judge.evaluate(_seq, rapper)
+	last = Judge.evaluate(_seq, rapper, _gs.upgrades)
 	if best.is_empty() or last.score > best.score:
 		best = last
 	var stars: int = last.stars
 	if stars >= 4:
 		npc.say(rapper.lines.great, 4.5)
-		npc.play("emote-yes")
+		npc.play("yes")
 	elif stars == 3:
 		npc.say(rapper.lines.ok, 4.5)
 	else:
 		npc.say(rapper.lines.bad, 4.5)
-		npc.play("emote-no")
+		npc.play("no")
 	take_judged.emit(last)
 	if takes_left <= 0 and int(best.stars) <= 2:
 		_storm_out()
@@ -138,7 +144,7 @@ func finish() -> Dictionary:
 	if state != State.REVIEW or best.is_empty():
 		return {}
 	var stars: int = best.stars
-	var rw := Judge.reward(rapper, stars)
+	var rw := Judge.reward(rapper, stars, _gs.upgrades)
 	_gs.add(rw.money, rw.rep, rw.cred)
 	_gs.record_track(rapper.id, stars, best.score)
 	npc.say(rapper.lines.pay, 3.5)
@@ -184,6 +190,7 @@ func _leave() -> void:
 func _on_arrived() -> void:
 	npc.face(MIC + Vector3(-1.6, 0, 1.2))  # half-turn towards the desk
 	npc.say(rapper.lines.hello, 4.5)
+	npc.play("wave")
 	_wait_timer = 25.0
 	_set_state(State.WAITING)
 

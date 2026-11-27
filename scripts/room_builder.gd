@@ -37,6 +37,7 @@ const PAL := {
 
 var screen_material: StandardMaterial3D
 var fan: Node3D
+var upgrade_nodes := {}
 var _noise_cache := {}
 var _base_remap := {}
 
@@ -69,6 +70,7 @@ func build() -> void:
 	_floor_clutter()
 	_lighting()
 	_dust()
+	_upgrade_props()
 
 
 func _process(delta: float) -> void:
@@ -635,7 +637,7 @@ func _bed_area() -> void:
 		"carpetWhite": mat(PAL.sheet, 1.0, "fabric", 5.0),
 	})
 	var bs: Vector3 = bed.get_meta("size")
-	solid(Vector3(bs.x, 0.5, bs.z), Vector3(1.56, 0.25, 1.6))
+	solid(Vector3(bs.x, 0.5, bs.z), Vector3(1.56, 0.25, 1.6), "bed", "Sleep (end the night)")
 	# Extra pillow + phone with screen on
 	kit(b, "pillowLong", Vector3(1.5, 0.48, 0.92), 8, 1.5, {"carpet": mat(PAL.pop.darkened(0.45), 1.0, "fabric", 5.0)})
 	part(b, box(Vector3(0.075, 0.01, 0.15)), Vector3(1.35, 0.53, 1.7), mat(PAL.plastic_black, 0.3, ""), Vector3(0, 25, 0))
@@ -759,6 +761,62 @@ func _floor_clutter() -> void:
 	var cable := mat(Color("0a0a0e"), 0.5, "")
 	part(f, cyl(0.007, 0.5), Vector3(-0.45, 0.008, -2.4), cable, Vector3(90, 70, 0))
 	part(f, cyl(0.007, 0.4), Vector3(0.05, 0.008, -2.3), cable, Vector3(90, 20, 0))
+
+
+# ================= Upgrades (hidden until bought) =================
+
+func _upgrade_props() -> void:
+	# Acoustic foam on the left and front walls
+	var foam := group("Upgrade_foam")
+	for z in [-1.6, -1.05, 1.9]:
+		for y in [1.25, 1.75]:
+			var p := Node3D.new()
+			p.position = Vector3(-2.04, y, z)
+			p.rotation_degrees.y = 180
+			foam.add_child(p)
+			_foam_panel(p, Vector3.ZERO)
+	for x in [0.0, 1.6]:
+		var p := Node3D.new()
+		p.position = Vector3(x, 1.6, 2.55)
+		p.rotation_degrees.y = 90
+		foam.add_child(p)
+		_foam_panel(p, Vector3.ZERO)
+	upgrade_nodes["foam"] = foam
+
+	# Neon sign above the bed
+	var neon := group("Upgrade_neon")
+	part(neon, box(Vector3(1.3, 0.34, 0.03)), Vector3(2.08, 1.95, 1.45), mat(Color("0c0a12"), 0.5, ""), Vector3(0, 90, 0))
+	text3d(neon, "STUDIO GRIND", Vector3(2.06, 1.95, 1.45), PAL.pop, 0.0024, Vector3(0, -90, 0), 6.0)
+	var nl := OmniLight3D.new()
+	nl.position = Vector3(1.8, 1.95, 1.45)
+	nl.light_color = PAL.pop
+	nl.light_energy = 1.2
+	nl.omni_range = 2.6
+	neon.add_child(nl)
+	upgrade_nodes["neon"] = neon
+
+	# Condenser mic: gold capsule on the stand in the booth
+	var mic := group("Upgrade_mic_pro")
+	part(mic, cyl(0.04, 0.17), Vector3(1.45, 1.52, -1.6), mat(Color("f2c14e"), 0.25, ""), Vector3(0, 0, 0))
+	part(mic, sphere(0.045), Vector3(1.45, 1.62, -1.6), mat(Color("cfd3dc"), 0.2, ""))
+	upgrade_nodes["mic_pro"] = mic
+
+	# Studio monitors on floor stands next to the desk
+	var mon := group("Upgrade_monitors")
+	for x in [-1.75, 0.3]:
+		part(mon, cyl(0.12, 0.02), Vector3(x, 0.01, -2.2), mat(PAL.plastic_black, 0.4, ""))
+		part(mon, cyl(0.02, 0.95), Vector3(x, 0.48, -2.2), mat(PAL.metal, 0.3, ""))
+		part(mon, box(Vector3(0.26, 0.4, 0.28)), Vector3(x, 1.16, -2.2), mat(PAL.plastic_black, 0.4, ""))
+		part(mon, cyl(0.085, 0.01), Vector3(x, 1.1, -2.055), mat(Color("2a2a33"), 0.4, ""), Vector3(90, 0, 0))
+		part(mon, cyl(0.03, 0.01), Vector3(x, 1.27, -2.055), mat(Color("3a3a44"), 0.3, ""), Vector3(90, 0, 0))
+		part(mon, box(Vector3(0.2, 0.008, 0.008)), Vector3(x, 0.98, -2.058), glow(PAL.neon_purple, 3.0))
+	upgrade_nodes["monitors"] = mon
+	apply_upgrades([])
+
+
+func apply_upgrades(owned: Array) -> void:
+	for id in upgrade_nodes.keys():
+		(upgrade_nodes[id] as Node3D).visible = id in owned
 
 
 # ================= Atmosphere =================

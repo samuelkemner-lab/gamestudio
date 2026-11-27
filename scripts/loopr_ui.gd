@@ -19,6 +19,14 @@ const TRACK_COLORS: Array[Color] = [
 ]
 
 var seq: Sequencer
+var game: GameState
+var kit_opt: OptionButton
+var inst_opt: OptionButton
+var save_btn: Button
+var roll_buttons: Array = []  # [step][semitone] -> Button
+var roll_rows: Array = []  # row label panels
+var _crash: Control
+var _syncing := false
 var step_buttons: Array = []  # [track][step] -> Button
 var playhead: Array[ColorRect] = []
 var play_button: Button
@@ -67,9 +75,13 @@ func setup(sequencer: Sequencer) -> void:
 	var rack := _build_channel_rack()
 	rack.name = "Channel Rack"
 	tabs.add_child(rack)
+	var roll := _build_piano_roll()
+	roll.name = "Piano Roll"
+	tabs.add_child(roll)
 	var mixer := _build_mixer()
 	mixer.name = "Mixer"
 	tabs.add_child(mixer)
+	_build_crash_overlay()
 
 	seq.step_changed.connect(_on_step_changed)
 	seq.play_state_changed.connect(_on_play_state_changed)
@@ -90,7 +102,7 @@ func _build_top_bar() -> Control:
 	bar.add_child(logo)
 
 	var sub := Label.new()
-	sub.text = "v0.4  //  bedroom edition"
+	sub.text = "v0.5  //  bedroom edition"
 	sub.add_theme_color_override("font_color", TEXT_DIM)
 	sub.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	bar.add_child(sub)
@@ -122,20 +134,74 @@ func _build_top_bar() -> Control:
 		seq.clear())
 	bar.add_child(clear_btn)
 
-	var reset_btn := _button("DEMO BEAT", PANEL_LIGHT)
-	reset_btn.custom_minimum_size = Vector2(130, 44)
+	var reset_btn := _button("DEMO", PANEL_LIGHT)
+	reset_btn.custom_minimum_size = Vector2(90, 44)
 	reset_btn.pressed.connect(func():
 		seq.load_default_pattern())
 	bar.add_child(reset_btn)
 
+	var kit_lbl := Label.new()
+	kit_lbl.text = "KIT"
+	kit_lbl.add_theme_color_override("font_color", TEXT_DIM)
+	kit_lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	bar.add_child(kit_lbl)
+	kit_opt = _option()
+	kit_opt.item_selected.connect(func(i: int):
+		if not _syncing:
+			seq.set_kit(kit_opt.get_item_metadata(i)))
+	bar.add_child(kit_opt)
+
+	save_btn = _button("SAVE", Color("1f9e6e"))
+	save_btn.custom_minimum_size = Vector2(110, 44)
+	save_btn.pressed.connect(func():
+		seq.save_snapshot()
+		refresh_grid())
+	bar.add_child(save_btn)
+
 	bar.add_child(_spacer())
 
 	var hint := Label.new()
-	hint.text = "[SPACE] play/stop    [ESC] leave desk"
+	hint.text = "[SPACE] play   [CTRL+S] save   [ESC] leave"
 	hint.add_theme_color_override("font_color", TEXT_DIM)
 	hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	bar.add_child(hint)
 	return bar
+
+
+func _option() -> OptionButton:
+	var o := OptionButton.new()
+	o.focus_mode = Control.FOCUS_NONE
+	o.custom_minimum_size = Vector2(120, 44)
+	o.add_theme_stylebox_override("normal", _box(PANEL_LIGHT, 8))
+	o.add_theme_stylebox_override("hover", _box(PANEL_LIGHT.lightened(0.1), 8))
+	o.add_theme_stylebox_override("pressed", _box(PANEL_LIGHT.darkened(0.1), 8))
+	o.add_theme_color_override("font_color", TEXT)
+	return o
+
+
+## Kits and instruments come from the shop.
+func bind_game(gs: GameState) -> void:
+	game = gs
+	gs.changed.connect(refresh_options)
+	refresh_options()
+
+
+func refresh_options() -> void:
+	_syncing = true
+	var ups: Array = game.upgrades if game else []
+	kit_opt.clear()
+	for k in Shop.kits_owned(ups):
+		kit_opt.add_item(k.capitalize())
+		kit_opt.set_item_metadata(kit_opt.item_count - 1, k)
+		if k == seq.kit_id:
+			kit_opt.select(kit_opt.item_count - 1)
+	inst_opt.clear()
+	for k in Shop.instruments_owned(ups):
+		inst_opt.add_item(k.capitalize())
+		inst_opt.set_item_metadata(inst_opt.item_count - 1, k)
+		if k == seq.instrument:
+			inst_opt.select(inst_opt.item_count - 1)
+	_syncing = false
 
 
 # ---------- Session bar (rapper brief + record) ----------
@@ -275,6 +341,119 @@ func refresh_grid() -> void:
 	for t in step_buttons.size():
 		for s in Sequencer.STEPS:
 			step_buttons[t][s].set_pressed_no_signal(seq.pattern[t][s])
+	for s in roll_buttons.size():
+		for n in Sequencer.NOTE_RANGE:
+			roll_buttons[s][n].set_pressed_no_signal(seq.has_note(s, n))
+	if bpm_box and absf(bpm_box.value - seq.bpm) > 0.1:
+		bpm_box.set_value_no_signal(seq.bpm)
+	if save_btn:
+		save_btn.text = "SAVE  ●" if seq.dirty else "SAVED"
+
+
+# ---------- Piano roll ----------
+
+func _build_piano_roll() -> Control:
+	var wrap := MarginContainer.new()
+	for side in ["left", "right", "top", "bottom"]:
+		wrap.add_theme_constant_override("margin_" + side, 18)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 4)
+	wrap.add_child(col)
+
+	var tools := HBoxContainer.new()
+	tools.add_theme_constant_override("separation", 12)
+	var l := Label.new()
+	l.text = "INSTRUMENT"
+	l.add_theme_color_override("font_color", TEXT_DIM)
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	tools.add_child(l)
+	inst_opt = _option()
+	inst_opt.item_selected.connect(func(i: int):
+		if not _syncing:
+			seq.set_instrument(inst_opt.get_item_metadata(i))
+			seq.preview_note(0))
+	tools.add_child(inst_opt)
+	var clr := _button("CLEAR MELODY", PANEL_LIGHT)
+	clr.custom_minimum_size = Vector2(150, 40)
+	clr.pressed.connect(func():
+		for st in Sequencer.STEPS:
+			for n in Sequencer.NOTE_RANGE:
+				if seq.has_note(st, n):
+					seq.set_note(st, n, false))
+	tools.add_child(clr)
+	var tip := Label.new()
+	tip.text = "Highlighted rows = C minor (sad/dark). Click to place notes."
+	tip.add_theme_color_override("font_color", TEXT_DIM)
+	tip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	tools.add_child(tip)
+	col.add_child(tools)
+
+	for s in Sequencer.STEPS:
+		var arr: Array = []
+		arr.resize(Sequencer.NOTE_RANGE)
+		roll_buttons.append(arr)
+	var note_col := Color("b05cff")
+	for n in range(Sequencer.NOTE_RANGE - 1, -1, -1):
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 4)
+		var in_scale := n in Sequencer.MINOR
+		var black: bool = str(Sequencer.NOTE_NAMES[n]).ends_with("#")
+		var name_btn := _button("%s%d" % [Sequencer.NOTE_NAMES[n], 5 if n == 12 else 4], Color("3a2f5c") if in_scale else (Color("14111f") if black else PANEL_LIGHT))
+		name_btn.custom_minimum_size = Vector2(70, 30)
+		name_btn.add_theme_font_size_override("font_size", 13)
+		name_btn.pressed.connect(seq.preview_note.bind(n))
+		row.add_child(name_btn)
+		for s in Sequencer.STEPS:
+			var b := Button.new()
+			b.toggle_mode = true
+			b.focus_mode = Control.FOCUS_NONE
+			b.custom_minimum_size = Vector2(46, 30)
+			var off := Color("2b2346") if in_scale else (Color("15121f") if black else Color("1f1a30"))
+			if (s / 4) % 2 == 1:
+				off = off.darkened(0.15)
+			b.add_theme_stylebox_override("normal", _box(off, 4))
+			b.add_theme_stylebox_override("hover", _box(off.lightened(0.15), 4))
+			b.add_theme_stylebox_override("pressed", _box(note_col, 4))
+			b.add_theme_stylebox_override("hover_pressed", _box(note_col.lightened(0.2), 4))
+			b.toggled.connect(func(on: bool):
+				seq.set_note(s, n, on)
+				if on and not seq.playing:
+					seq.preview_note(n))
+			row.add_child(b)
+			roll_buttons[s][n] = b
+			if s % 4 == 3 and s < Sequencer.STEPS - 1:
+				row.add_child(_gap())
+		col.add_child(row)
+	return wrap
+
+
+# ---------- PC crash ----------
+
+func _build_crash_overlay() -> void:
+	_crash = PanelContainer.new()
+	_crash.add_theme_stylebox_override("panel", _box(Color("1f3fbf"), 0))
+	_crash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var c := CenterContainer.new()
+	_crash.add_child(c)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 18)
+	c.add_child(col)
+	for line in [[":(", 120], ["LOOPR.exe has stopped responding", 34], ["Your unsaved changes are gone. Your laptop is older than you.", 20], ["Tip: press SAVE (or Ctrl+S) every now and then.", 20]]:
+		var lb := Label.new()
+		lb.text = line[0]
+		lb.add_theme_font_size_override("font_size", line[1])
+		lb.add_theme_color_override("font_color", Color.WHITE)
+		col.add_child(lb)
+	var ok := _button("REBOOT", Color("15309a"))
+	ok.custom_minimum_size = Vector2(180, 48)
+	ok.pressed.connect(func(): _crash.visible = false)
+	col.add_child(ok)
+	_crash.visible = false
+	add_child(_crash)
+
+
+func show_crash() -> void:
+	_crash.visible = true
 
 
 func _on_step_toggled(on: bool, track: int, step: int) -> void:
@@ -304,6 +483,7 @@ func _build_mixer() -> Control:
 
 	for t in Sequencer.TRACKS.size():
 		row.add_child(_channel_strip(Sequencer.TRACKS[t], seq.bus_index(t), TRACK_COLORS[t]))
+	row.add_child(_channel_strip("Keys", AudioServer.get_bus_index("Keys"), Color("e879f9")))
 	row.add_child(_channel_strip("MASTER", 0, ACCENT))
 	return wrap
 

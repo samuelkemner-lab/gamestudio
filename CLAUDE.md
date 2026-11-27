@@ -42,9 +42,11 @@ Lees **docs/ART_DIRECTION.md** (de masterprompt) vóór elke visuele taak en toe
 - `scripts/npc.gd`: Kenney Mini Character + accessoires, lopen, animaties, tekstballon, brabbelstem (`voice_synth.gd`)
 - `scripts/chaos.gd`: geluidsmeter → buren → politie; `scripts/game_state.gd`: geld/rep/cred + save (user://)
 - `scripts/phone_ui.gd`, `scripts/results_ui.gd`, `scripts/ui_kit.gd`: telefoon, resultaten, gedeelde UI-stijl
-- `assets/models/kenney_characters`: CC0-personages (let op: in de bron-repo staan ze in Git LFS, ophalen via media.githubusercontent.com)
-- `scripts/sequencer.gd`: audiokern (16 stappen, een audio-bus per spoor, mixer-API)
-- `scripts/loopr_ui.gd`: LOOPR-interface (Channel Rack + Mixer)
+- `assets/models/quaternius_characters`: CC0-personages met normale verhoudingen (Quaternius Ultimate Modular). Armature heeft schaal 100: props in een 0.01-holder onder een BoneAttachment3D. Animaties heten `CharacterArmature|Idle_Neutral`, `|Walk`, `|Wave`, enz. Bron-GLB's staan in Git LFS: ophalen via media.githubusercontent.com
+- `scripts/shop.gd`: shop-items (upgrades, kits, instrumenten); `room_builder.apply_upgrades()` maakt ze zichtbaar in de kamer
+- Dagcyclus: 1 echte seconde = 1 game-minuut, om 06:00 val je in slaap; `game_state.sleep()` berekent streams, inkomsten en leaks
+- `scripts/sequencer.gd`: audiokern (16 stappen, melodie, kits, instrumenten, een audio-bus per spoor, mixer-API, save/restore)
+- `scripts/loopr_ui.gd`: LOOPR-interface (Channel Rack, Piano Roll, Mixer, SAVE, crash-scherm)
 - `tests/run_tests.gd`: headless smoke tests
 - `tests/screenshot.gd`: screenshots voor visuele checks
 

@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://irfeququjdq8"
-path="res://.godot/imported/character-male-b.glb-f10b189384bd7e08949f1d97ad46ebbf.scn"
+uid="uid://blfcw05okhoc1"
+path="res://.godot/imported/worker_female.glb-f0708a5399c7484d59ba6646fbdd2e23.scn"
 
 [deps]
 
-source_file="res://assets/models/kenney_characters/character-male-b.glb"
-dest_files=["res://.godot/imported/character-male-b.glb-f10b189384bd7e08949f1d97ad46ebbf.scn"]
+source_file="res://assets/models/quaternius_characters/worker_female.glb"
+dest_files=["res://.godot/imported/worker_female.glb-f0708a5399c7484d59ba6646fbdd2e23.scn"]
 
 [params]
 

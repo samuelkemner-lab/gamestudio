@@ -9,8 +9,9 @@ const BIG_EARL := {
 	"id": "big_earl",
 	"name": "Big Earl",
 	"style": "Boom bap",
-	"model": "character-male-b",
+	"model": "casual_male",
 	"accessory": "bucket_hat",
+	"recolor": {"LightBrown": Color("b8862c"), "LightBlue": Color("34466b"), "Red_Dark": Color("e8e2d0")},
 	"accent": Color("e0a03a"),
 	"voice_hz": 105.0,
 	"patience": 4,
@@ -20,8 +21,10 @@ const BIG_EARL := {
 	"bpm": [84, 96],
 	"wants": {"Kick": [2, 5], "Snare": [2, 3], "Hi-hat": [4, 9], "Clap": [0, 2], "808": [0, 0]},
 	"signature": {"Snare": [4, 12]},
+	"melody": {"notes": [0, 10], "scale": [], "instrument": "keys"},
+	"kit": "dusty",
 	"mix": {"Kick": "loud", "Snare": "loud", "808": "off"},
-	"brief_easy": "Wants 84–96 BPM, snare on 2 and 4 (steps 5 and 13), no 808. Kick and snare up front.",
+	"brief_easy": "Wants 84–96 BPM, snare on steps 5 and 13, no 808, kick and snare loud. Melody optional (keys). Dusty kit = bonus.",
 	"brief_pro": "\"Real hip hop, young blood. Slow it down, let that snare crack. Keep that 808 nonsense away from me.\"",
 	"dm": "yo. heard u got a studio. i got 16 bars about the old days. no trap stuff pls",
 	"lines": {
@@ -40,8 +43,9 @@ const LIL_TEAR := {
 	"id": "lil_tear",
 	"name": "Lil Tear",
 	"style": "Emo / autotune",
-	"model": "character-female-f",
+	"model": "punk_female",
 	"accessory": "beanie",
+	"recolor": {"Pink": Color("8b4dff")},
 	"accent": Color("c084fc"),
 	"voice_hz": 245.0,
 	"patience": 3,
@@ -51,8 +55,10 @@ const LIL_TEAR := {
 	"bpm": [125, 145],
 	"wants": {"Kick": [2, 4], "Snare": [0, 2], "Hi-hat": [5, 12], "Clap": [1, 3], "808": [2, 4]},
 	"signature": {"Clap": [12]},
+	"melody": {"notes": [4, 14], "scale": "minor", "instrument": "pad"},
+	"kit": "default",
 	"mix": {"808": "loud", "Hi-hat": "quiet"},
-	"brief_easy": "Wants 125–145 BPM, a clap on step 13, soft hi-hats, 2–4 big 808 hits. Keep the kick simple.",
+	"brief_easy": "Wants 125–145 BPM, clap on step 13, soft hats, 2–4 loud 808s, and a sad melody (4+ notes, C minor). Pad sound = bonus.",
 	"brief_pro": "\"I want it to sound like crying in the rain but like... in a cool way? Big 808. Soft hats.\"",
 	"dm": "heyyy i just got dumped and i need to make a song about it tonight. sad beat pls :(",
 	"lines": {
@@ -71,8 +77,9 @@ const GHOST := {
 	"id": "ghost",
 	"name": "Ghost",
 	"style": "Drill",
-	"model": "character-male-f",
+	"model": "hoodie_male",
 	"accessory": "drill",
+	"recolor": {"Purple": Color("17161e"), "LightBlue": Color("1f1e26")},
 	"accent": Color("25d9f5"),
 	"voice_hz": 120.0,
 	"patience": 2,
@@ -82,8 +89,10 @@ const GHOST := {
 	"bpm": [138, 146],
 	"wants": {"Kick": [1, 3], "Snare": [1, 2], "Hi-hat": [9, 16], "Clap": [0, 2], "808": [3, 6]},
 	"signature": {"Snare": [8]},
+	"melody": {"notes": [3, 10], "scale": "minor", "instrument": "bell"},
+	"kit": "drill",
 	"mix": {"808": "loud", "Kick": "quiet"},
-	"brief_easy": "Wants 138–146 BPM, ONE snare on step 9 (half-time), 9+ hi-hats, 3–6 loud 808s, quiet kick.",
+	"brief_easy": "Wants 138–146 BPM, ONE snare on step 9, 9+ hats, 3–6 loud 808s, quiet kick, dark melody (3–10 notes, C minor). Bell + drill kit = bonus.",
 	"brief_pro": "\"Make it cold. Sliding 808s, hats going crazy. Don't waste my time, bro.\"",
 	"dm": "wagwan. heard ur beats are tapped. i got bars. dont waste my time",
 	"lines": {
@@ -98,17 +107,52 @@ const GHOST := {
 	},
 }
 
+const SPIKE := {
+	"id": "spike",
+	"name": "Spike",
+	"style": "Rage",
+	"model": "punk_male",
+	"accessory": "punk",
+	"recolor": {},
+	"accent": Color("ff3d7f"),
+	"voice_hz": 160.0,
+	"patience": 3,
+	"min_cred": 0,
+	"min_rep": 12,
+	"pay": 120,
+	"cred_gain": 2,
+	"bpm": [150, 170],
+	"wants": {"Kick": [4, 8], "Snare": [1, 3], "Hi-hat": [6, 16], "Clap": [2, 4], "808": [3, 8]},
+	"signature": {"Kick": [0], "Clap": [4, 12]},
+	"melody": {"notes": [6, 16], "scale": [], "instrument": "pluck"},
+	"kit": "drill",
+	"mix": {"808": "loud", "Kick": "loud", "Clap": "loud"},
+	"brief_easy": "Wants 150–170 BPM, kick on step 1, claps on 5 and 13, lots of drums, LOUD 808/kick/clap, busy pluck melody (6+ notes).",
+	"brief_pro": "\"I wanna break my speakers. FAST. LOUD. Make the plucks go crazy.\"",
+	"dm": "yo i do rage music. need smth that makes the crowd go insane. u ready??",
+	"lines": {
+		"hello": "YOOOO this room is tiny. Let's make it shake!!",
+		"wait": "Make it LOUDER. Louder than that.",
+		"recording": "AAAAAH LET'S GO!",
+		"great": "THE SPEAKERS ARE SCREAMING. I LOVE IT!",
+		"ok": "Needs more energy bro, more chaos!",
+		"bad": "Bro this is a lullaby. I'm falling asleep.",
+		"angry": "BORING. I'm out.",
+		"pay": "Take the money, you're insane, I love you!",
+	},
+}
+
 const COP := {
 	"id": "cop",
 	"name": "Officer Dekker",
-	"model": "character-male-c",
-	"accessory": "",
+	"model": "swat",
+	"accessory": "cop",
 	"voice_hz": 140.0,
 }
 
 
 static func all() -> Array:
-	return [BIG_EARL, LIL_TEAR, GHOST]
+	return [BIG_EARL, LIL_TEAR, GHOST, SPIKE]
 
 
 static func by_id(id: String) -> Dictionary:

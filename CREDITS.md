@@ -4,6 +4,6 @@
 | --- | --- | --- |
 | Furniture Kit 2.0 (`assets/models/kenney_furniture`) | Kenney – www.kenney.nl | CC0 1.0 |
 | City Kit Commercial 2.1 (`assets/models/kenney_city`) | Kenney – www.kenney.nl | CC0 1.0 |
-| Mini Characters 1.0 (`assets/models/kenney_characters`) | Kenney – www.kenney.nl | CC0 1.0 |
+| Ultimate Modular Men & Women (`assets/models/quaternius_characters`) | Quaternius – quaternius.com | CC0 1.0 |
 
 All other models, materials, shaders, sounds and UI are made in code for Studio Grind.

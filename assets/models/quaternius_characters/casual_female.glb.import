@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://dm0julv36lrf2"
-path="res://.godot/imported/aid-mask.glb-898b384fc8170146baf43a1ee8adf5dd.scn"
+uid="uid://br8paj4xk2m03"
+path="res://.godot/imported/casual_female.glb-cd17b74130b4bb3bd866eb96359f5786.scn"
 
 [deps]
 
-source_file="res://assets/models/kenney_characters/aid-mask.glb"
-dest_files=["res://.godot/imported/aid-mask.glb-898b384fc8170146baf43a1ee8adf5dd.scn"]
+source_file="res://assets/models/quaternius_characters/casual_female.glb"
+dest_files=["res://.godot/imported/casual_female.glb-cd17b74130b4bb3bd866eb96359f5786.scn"]
 
 [params]
 

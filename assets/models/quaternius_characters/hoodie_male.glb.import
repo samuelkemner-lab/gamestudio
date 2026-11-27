@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://cfq5tt3km86yd"
-path="res://.godot/imported/aid-sunglasses.glb-7b8815050339ca70c53dd3febc56b658.scn"
+uid="uid://du8s3j3trcs28"
+path="res://.godot/imported/hoodie_male.glb-5df1f9a1f6c0f38e26c6f057b84e1fb2.scn"
 
 [deps]
 
-source_file="res://assets/models/kenney_characters/aid-sunglasses.glb"
-dest_files=["res://.godot/imported/aid-sunglasses.glb-7b8815050339ca70c53dd3febc56b658.scn"]
+source_file="res://assets/models/quaternius_characters/hoodie_male.glb"
+dest_files=["res://.godot/imported/hoodie_male.glb-5df1f9a1f6c0f38e26c6f057b84e1fb2.scn"]
 
 [params]
 

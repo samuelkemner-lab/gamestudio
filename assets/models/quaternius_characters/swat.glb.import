@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://c4g4ebhyuel5l"
-path="res://.godot/imported/character-male-a.glb-1279c094121b77146dbf3faba0f85106.scn"
+uid="uid://21i50dcvbsbb"
+path="res://.godot/imported/swat.glb-48e5e6c2f5b2de0b28f4ca06a8c33583.scn"
 
 [deps]
 
-source_file="res://assets/models/kenney_characters/character-male-a.glb"
-dest_files=["res://.godot/imported/character-male-a.glb-1279c094121b77146dbf3faba0f85106.scn"]
+source_file="res://assets/models/quaternius_characters/swat.glb"
+dest_files=["res://.godot/imported/swat.glb-48e5e6c2f5b2de0b28f4ca06a8c33583.scn"]
 
 [params]
 

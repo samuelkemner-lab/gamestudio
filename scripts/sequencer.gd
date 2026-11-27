@@ -8,14 +8,24 @@ signal pattern_changed
 
 const TRACKS: Array[String] = ["Kick", "Snare", "Hi-hat", "Clap", "808"]
 const STEPS := 16
+const NOTE_RANGE := 13  # one octave + top note, semitones above C4
+const NOTE_NAMES := ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B", "C"]
+const MINOR := [0, 2, 3, 5, 7, 8, 10, 12]
 
 var bpm := 140.0
 var playing := false
 var pattern: Array = []  # pattern[track][step] -> bool
+var melody: Array = []  # melody[step] -> Array of semitones (0..12 above C4)
+var instrument := "keys"
+var kit_id := "default"
 var current_step := -1
+var dirty := false  # unsaved changes (for the pc-crash event)
+var _saved := {}
 
 var _acc := 0.0
 var _players: Array[AudioStreamPlayer] = []
+var _keys: Array[AudioStreamPlayer] = []
+var _key_rr := 0
 
 
 func _ready() -> void:
@@ -35,11 +45,20 @@ func _ready() -> void:
 		p.max_polyphony = 4
 		add_child(p)
 		_players.append(p)
+	for s in STEPS:
+		melody.append([])
+	for i in 8:
+		var k := AudioStreamPlayer.new()
+		k.bus = "Keys"
+		add_child(k)
+		_keys.append(k)
+	set_instrument("keys")
 	load_default_pattern()
+	save_snapshot()
 
 
 func _setup_buses() -> void:
-	for track_name in TRACKS:
+	for track_name in TRACKS + ["Keys"]:
 		if AudioServer.get_bus_index(track_name) == -1:
 			var idx := AudioServer.bus_count
 			AudioServer.add_bus(idx)
@@ -65,18 +84,100 @@ func load_default_pattern() -> void:
 func clear() -> void:
 	for row in pattern:
 		row.fill(false)
+	for st in melody:
+		st.clear()
+	dirty = true
 	pattern_changed.emit()
 
 
 func toggle(track: int, step: int) -> bool:
 	pattern[track][step] = not pattern[track][step]
+	dirty = true
 	pattern_changed.emit()
 	return pattern[track][step]
 
 
 func set_step(track: int, step: int, on: bool) -> void:
 	pattern[track][step] = on
+	dirty = true
 	pattern_changed.emit()
+
+
+# ---------- Melody (piano roll) ----------
+
+func set_note(step: int, semitone: int, on: bool) -> void:
+	var notes: Array = melody[step]
+	if on and not semitone in notes:
+		notes.append(semitone)
+	elif not on:
+		notes.erase(semitone)
+	dirty = true
+	pattern_changed.emit()
+
+
+func has_note(step: int, semitone: int) -> bool:
+	return semitone in melody[step]
+
+
+func note_count() -> int:
+	var n := 0
+	for st in melody:
+		n += st.size()
+	return n
+
+
+func off_scale_notes(scale: Array) -> int:
+	var n := 0
+	for st in melody:
+		for semi in st:
+			if not semi in scale:
+				n += 1
+	return n
+
+
+func preview_note(semitone: int) -> void:
+	var k := _keys[_key_rr]
+	_key_rr = (_key_rr + 1) % _keys.size()
+	k.pitch_scale = pow(2.0, semitone / 12.0)
+	k.play()
+
+
+func set_instrument(id: String) -> void:
+	instrument = id
+	var s := DrumSynth.instrument(id)
+	for k in _keys:
+		k.stream = s
+
+
+func set_kit(id: String) -> void:
+	kit_id = id
+	var streams := DrumSynth.kit(id)
+	for i in TRACKS.size():
+		_players[i].stream = streams[i]
+
+
+# ---------- Save / crash ----------
+
+func snapshot() -> Dictionary:
+	return {"pattern": pattern.duplicate(true), "melody": melody.duplicate(true), "bpm": bpm}
+
+
+func restore(snap: Dictionary) -> void:
+	pattern = snap.pattern.duplicate(true)
+	melody = snap.melody.duplicate(true)
+	bpm = snap.bpm
+	pattern_changed.emit()
+
+
+func save_snapshot() -> void:
+	_saved = snapshot()
+	dirty = false
+
+
+func restore_saved() -> void:
+	if not _saved.is_empty():
+		restore(_saved)
+	dirty = false
 
 
 func step_length() -> float:
@@ -126,6 +227,8 @@ func _advance() -> void:
 			if TRACKS[i] == "808":
 				_players[i].stop()  # 808 choke: a new note cuts the tail
 			_players[i].play()
+	for semi in melody[current_step]:
+		preview_note(semi)
 	step_changed.emit(current_step)
 
 

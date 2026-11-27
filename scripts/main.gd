@@ -1,9 +1,10 @@
 extends Node3D
-## Studio Grind – prototype v0.4
+## Studio Grind – prototype v0.5
 ## Title screen → bedroom studio → phone DMs → rapper session in the booth → rating & payout.
 
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
-const VERSION := "v0.4 prototype"
+const VERSION := "v0.5 prototype"
+const DAWN := 30 * 60  # 06:00 the next morning
 const BOOTH_LOOK := Vector3(1.45, 1.2, -1.6)
 
 var player  # player.gd (CharacterBody3D)
@@ -24,7 +25,9 @@ var prompt_text: Label
 var stats_label: Label
 var noise_bar: ProgressBar
 var toast_label: Label
+var clock_label: Label
 var _toast_time := 0.0
+var _clock_acc := 0.0
 
 var in_menu := false
 var menu_layer: CanvasLayer
@@ -63,6 +66,8 @@ func _ready() -> void:
 	add_child(chaos)
 	chaos.setup(self, sequencer, game)
 	chaos.toast.connect(show_toast)
+	chaos.pc_crash.connect(_on_pc_crash)
+	room.apply_upgrades(game.upgrades)
 
 	_build_monitor_screen()
 
@@ -82,6 +87,7 @@ func _ready() -> void:
 	layer.add_child(loopr)
 	loopr.setup(sequencer)
 	loopr.bind_session(session)
+	loopr.bind_game(game)
 	loopr.record_pressed.connect(_on_record_pressed)
 	loopr.finish_pressed.connect(_on_finish_pressed)
 	loopr.visible = false
@@ -91,6 +97,7 @@ func _ready() -> void:
 	phone.build()
 	phone.visible = false
 	phone.book_requested.connect(_on_book)
+	phone.buy_requested.connect(_on_buy)
 	phone.hints_toggled.connect(func(easy): session.easy_mode = easy; loopr.update_session())
 
 	results = ResultsUI.new()
@@ -117,6 +124,7 @@ func _build_monitor_screen() -> void:
 	vp.add_child(screen_ui)
 	screen_ui.setup(sequencer)
 	screen_ui.bind_session(session)
+	screen_ui.bind_game(game)
 	room.screen_material.albedo_texture = vp.get_texture()
 
 
@@ -139,10 +147,22 @@ func _process(delta: float) -> void:
 	var fill := noise_bar.get_theme_stylebox("fill") as StyleBoxFlat
 	if fill:
 		fill.bg_color = UIKit.CYAN.lerp(UIKit.POP, game.noise / 100.0)
+	_tick_clock(delta)
 	if _toast_time > 0.0:
 		_toast_time -= delta
 		toast_label.modulate.a = clampf(_toast_time, 0.0, 1.0)
 		toast_label.position = Vector2((vp.x - toast_label.size.x) / 2.0, vp.y - 140)
+
+
+func _tick_clock(delta: float) -> void:
+	_clock_acc += delta
+	while _clock_acc >= 1.0:
+		_clock_acc -= 1.0
+		game.minutes += 1
+	clock_label.text = "DAY %d   ·   %s" % [game.day, game.clock_text()]
+	if game.minutes >= DAWN and not session.is_active() and not results.visible:
+		show_toast("06:00. You pass out on your keyboard...")
+		go_to_sleep()
 
 
 func _prompt_for(target: Object) -> String:
@@ -176,6 +196,12 @@ func _input(event: InputEvent) -> void:
 			if loopr.visible and session.state != Session.State.RECORDING:
 				sequencer.toggle_play()
 				get_viewport().set_input_as_handled()
+		KEY_S:
+			if loopr.visible and event.ctrl_pressed:
+				sequencer.save_snapshot()
+				loopr.refresh_grid()
+				show_toast("Project saved.")
+				get_viewport().set_input_as_handled()
 		KEY_TAB:
 			if not loopr.visible and not results.visible:
 				toggle_phone()
@@ -191,6 +217,11 @@ func _on_interacted(target: Object) -> void:
 				session.npc.say(session.rapper.brief_pro.trim_prefix("\"").trim_suffix("\""), 5.0)
 			elif not session.is_active():
 				show_toast("Nobody's here. Check your phone for DMs  [TAB]")
+		"bed":
+			if session.is_active():
+				show_toast("You can't sleep now, %s is still here." % session.rapper.get("name", "someone"))
+			else:
+				go_to_sleep()
 
 
 func _set_ui_mode(ui: bool) -> void:
@@ -215,6 +246,28 @@ func toggle_phone() -> void:
 	if phone.visible:
 		phone.refresh(game, session)
 	_set_ui_mode(phone.visible)
+
+
+# ---------- Day cycle, shop, crashes ----------
+
+func go_to_sleep() -> void:
+	sequencer.stop()
+	var night := game.sleep()
+	results.show_night(night)
+	_set_ui_mode(true)
+
+
+func _on_buy(id: String) -> void:
+	if game.buy(id):
+		room.apply_upgrades(game.upgrades)
+		show_toast("Bought: %s" % Shop.item(id).name)
+
+
+func _on_pc_crash() -> void:
+	if loopr.visible:
+		loopr.show_crash()
+	else:
+		show_toast("Your laptop crashed. Unsaved beat lost. (Ctrl+S in LOOPR!)")
 
 
 # ---------- Session flow ----------
@@ -256,9 +309,11 @@ func _on_session_finished(summary: Dictionary) -> void:
 
 func _on_results_closed() -> void:
 	_set_ui_mode(false)
-	if game.street_cred >= 8 and not game.has_meta("ghost_unlocked"):
-		game.set_meta("ghost_unlocked", true)
-		show_toast("New DM unlocked: Ghost (drill) wants a session  [TAB]")
+	for r in Rappers.all():
+		var key := "unlock_" + str(r.id)
+		if session.unlocked(r) and (int(r.get("min_cred", 0)) > 0 or int(r.get("min_rep", 0)) > 0) and not game.has_meta(key):
+			game.set_meta(key, true)
+			show_toast("New DM unlocked: %s (%s) wants a session  [TAB]" % [r.name, r.style])
 
 
 func show_toast(text: String) -> void:
@@ -283,6 +338,7 @@ func show_menu() -> void:
 	menu_cam.current = true
 	sequencer.play()
 	chaos.enabled = false
+	sequencer.save_snapshot()
 
 	menu_layer = CanvasLayer.new()
 	menu_layer.layer = 20
@@ -393,6 +449,9 @@ func _build_hud() -> void:
 	var noise_lbl := UIKit.label("noise", 11, UIKit.DIM)
 	noise_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	scol.add_child(noise_lbl)
+	clock_label = UIKit.label("", 14, UIKit.CYAN)
+	clock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	scol.add_child(clock_label)
 
 	crosshair = UIKit.label("·", 28, Color(1, 1, 1, 0.8))
 	crosshair.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

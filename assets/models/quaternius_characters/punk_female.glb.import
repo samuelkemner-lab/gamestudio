@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://jcjquqf0102t"
-path="res://.godot/imported/character-female-a.glb-668c6c89693726f5c25c8a38c9f9d9f4.scn"
+uid="uid://b6gks60xkggl0"
+path="res://.godot/imported/punk_female.glb-c85ed81ec7a7630c1fac900e6a3e4b80.scn"
 
 [deps]
 
-source_file="res://assets/models/kenney_characters/character-female-a.glb"
-dest_files=["res://.godot/imported/character-female-a.glb-668c6c89693726f5c25c8a38c9f9d9f4.scn"]
+source_file="res://assets/models/quaternius_characters/punk_female.glb"
+dest_files=["res://.godot/imported/punk_female.glb-c85ed81ec7a7630c1fac900e6a3e4b80.scn"]
 
 [params]
 

@@ -27,6 +27,24 @@ func _boom_bap(seq: Sequencer) -> void:
 		seq.set_volume(seq.bus_index(t), 1.0)
 
 
+func _emo(seq: Sequencer, notes: Array) -> void:
+	seq.clear()
+	seq.bpm = 135
+	for st in [0, 10]:
+		seq.set_step(0, st, true)
+	seq.set_step(3, 12, true)
+	for st in range(0, 16, 2):
+		seq.set_step(2, st, true)
+	for st in [0, 6, 10]:
+		seq.set_step(4, st, true)
+	for i in notes.size():
+		seq.set_note(i * 3, notes[i], true)
+	for t in 5:
+		seq.set_mute(seq.bus_index(t), false)
+		seq.set_volume(seq.bus_index(t), 1.0)
+	seq.set_volume(seq.bus_index(2), 0.7)
+
+
 func _wait_until(cond: Callable, timeout: float) -> void:
 	var t0 := Time.get_ticks_msec()
 	while not cond.call() and Time.get_ticks_msec() - t0 < timeout * 1000.0:
@@ -44,6 +62,7 @@ func _run() -> void:
 	await process_frame
 
 	var seq: Sequencer = main.get_node("Sequencer")
+	main.chaos.crashes_enabled = false
 	check(seq != null, "sequencer exists")
 	check(seq.pattern.size() == 5, "5 tracks")
 	check(seq.pattern[0].size() == 16, "16 steps")
@@ -127,6 +146,58 @@ func _run() -> void:
 	await _wait_until(func(): return gs.money < cash, 20.0)
 	check(gs.money == cash - Chaos.FINE, "noise → police fine €%d" % Chaos.FINE)
 	seq.stop()
+
+	# --- Melody / piano roll ---
+	var tear := Rappers.LIL_TEAR
+	_emo(seq, [0, 3, 7, 10, 12])
+	var sad := Judge.evaluate(seq, tear)
+	_emo(seq, [])
+	var no_mel := Judge.evaluate(seq, tear)
+	_emo(seq, [1, 4, 6, 9, 11])
+	var wrong_scale := Judge.evaluate(seq, tear)
+	check(sad.score > no_mel.score and sad.score > wrong_scale.score, "Lil Tear rewards a C-minor melody (%d vs %d none / %d off-scale)" % [sad.score, no_mel.score, wrong_scale.score])
+	check(int(sad.stars) >= 4, "emo beat with minor melody gets 4+ stars")
+	seq.set_instrument("pad")
+	var pad := Judge.evaluate(seq, tear)
+	seq.set_instrument("keys")
+	check(true, "instrument switch works")
+
+	# --- Upgrades ---
+	gs.reset()
+	gs.money = 1000
+	var plain := Judge.evaluate(seq, tear, gs.upgrades)
+	check(gs.buy("mic_pro") and gs.has("mic_pro"), "buy condenser mic")
+	check(not gs.buy("mic_pro"), "can't buy twice")
+	var boosted := Judge.evaluate(seq, tear, gs.upgrades)
+	check(boosted.score >= plain.score + 5 or boosted.score == 100, "condenser mic boosts the score")
+	main.room.apply_upgrades(gs.upgrades)
+	check(main.room.upgrade_nodes["mic_pro"].visible and not main.room.upgrade_nodes["foam"].visible, "bought upgrades appear in the room")
+	gs.money = 10
+	check(not gs.buy("neon"), "can't buy without money")
+
+	# --- Day cycle / streams ---
+	gs.reset()
+	gs.record_track("big_earl", 5, 100)
+	gs.record_track("lil_tear", 3, 60)
+	gs.booked_today.append("big_earl")
+	var cash0 := gs.money
+	var night := gs.sleep()
+	check(gs.day == 2 and night.streams > 0 and gs.money == cash0 + int(night.earned), "sleeping pays streaming royalties (+€%d, %d streams)" % [night.earned, night.streams])
+	check(gs.booked_today.is_empty(), "rappers available again the next day")
+
+	# --- PC crash ---
+	seq.load_default_pattern()
+	seq.save_snapshot()
+	seq.clear()
+	check(seq.dirty, "edits mark the project unsaved")
+	main.chaos.crash()
+	check(Judge.count_hits(seq, 1) == 2 and not seq.dirty, "crash restores the last saved beat")
+
+	# --- Unlocks ---
+	gs.reset()
+	check(not sess.unlocked(Rappers.SPIKE), "Spike locked at 0 rep")
+	gs.reputation = 12
+	check(sess.unlocked(Rappers.SPIKE), "Spike unlocks at 12 rep")
 
 	print("RESULT: ", "PASS" if failures == 0 else "FAIL (%d)" % failures)
 	quit(failures)

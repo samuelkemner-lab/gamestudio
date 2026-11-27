@@ -71,11 +71,41 @@ func build() -> void:
 	_front_wall()
 	_floor_clutter()
 	_lighting()
+	_street_sweep()
 	_dust()
 	_upgrade_props()
 
 
+var _sweep: SpotLight3D
+var _sweep_t := 6.0
+
+
+## A car passes seven floors down: its headlights sweep across the ceiling.
+func _street_sweep() -> void:
+	_sweep = SpotLight3D.new()
+	_sweep.position = Vector3(3.4, 0.4, -0.6)
+	_sweep.light_color = Color("fff1d8")
+	_sweep.light_energy = 0.0
+	_sweep.spot_range = 9.0
+	_sweep.spot_angle = 22.0
+	_sweep.shadow_enabled = true
+	add_child(_sweep)
+
+
+func _process_sweep(delta: float) -> void:
+	if not _sweep:
+		return
+	_sweep_t -= delta
+	if _sweep_t <= 0.0:
+		_sweep_t = randf_range(14.0, 26.0)
+	var p := clampf((3.2 - _sweep_t) / 3.2, 0.0, 1.0) if _sweep_t < 3.2 else 0.0
+	# light rises from the window sill, sweeps across the ceiling from front to back
+	_sweep.rotation_degrees = Vector3(28.0, 90.0 + lerpf(-35.0, 35.0, p), 0.0)
+	_sweep.light_energy = sin(p * PI) * 2.2
+
+
 func _process(delta: float) -> void:
+	_process_sweep(delta)
 	if fan:
 		fan.rotate_y(delta * 2.2)
 

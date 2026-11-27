@@ -31,6 +31,25 @@ const SHOPS := [
 
 var spawn_local := Vector3(-42.0, 0.05, -8.4)
 var city_env: Environment
+var wetness := 0.65
+var _wet_mats: Array[ShaderMaterial] = []
+var _car_mat: ShaderMaterial
+var game: GameState  # set by main (reputation for being recognised)
+
+## Closing time per shop in game minutes (the night runs 22:00 = 1320 .. 06:00 = 1800).
+const HOURS := {"music": 24 * 60, "coffeeshop": 25 * 60, "snackbar": 27 * 60, "casino": 30 * 60, "nightshop": 99999, "studio": 99999, "home": 99999}
+var _shop_state := {}  # id -> {shutter, lights, mats}
+var _open := {}
+var weather := "dry"
+var _rain: GPUParticles3D
+var _amb_city: AudioStreamPlayer
+var _amb_rain: AudioStreamPlayer
+var _amb_water: AudioStreamPlayer3D
+var _signal_state := 0  # 0 green, 1 amber, 2 red (main road)
+var _signal_t := 0.0
+var _signal_lamps: Array = []  # [[green_mat, amber_mat, red_mat], ...]
+var _greet_t := 0.0
+var _greeted := {}
 var cam_attr: CameraAttributesPractical
 var quality_high := true
 var player: Node3D  # set by main, cars brake for it
@@ -46,6 +65,11 @@ func build_city() -> void:
 	_rng.seed = 2026
 	_base_remap = {"_defaultMat": mat(Color("2a2633"), 0.6, "")}
 	_outdoor_environment()
+	_car_mat = ShaderMaterial.new()
+	_car_mat.shader = load("res://assets/shaders/kenney_tint.gdshader")
+	_car_mat.set_shader_parameter("colormap", load("res://assets/models/kenney_cars/Textures/colormap.png"))
+	_car_mat.set_shader_parameter("roughness_base", 0.28)
+	_car_mat.set_shader_parameter("metallic_base", 0.35)
 	_bmat = ShaderMaterial.new()
 	_bmat.shader = load("res://assets/shaders/night_building.gdshader")
 	_bmat.set_shader_parameter("colormap", load("res://assets/models/kenney_city/Textures/colormap.png"))
@@ -54,6 +78,7 @@ func build_city() -> void:
 	_bmat.set_shader_parameter("window_energy", 0.5)
 	_bmat.set_shader_parameter("facade_brightness", 0.26)
 	_ground_and_roads()
+	_facades()
 	_north_side()
 	_south_side()
 	_casino()
@@ -61,9 +86,14 @@ func build_city() -> void:
 	_street_lights()
 	_street_props()
 	_parked_cars()
+	_tram_lines()
 	_traffic()
+	_tram()
+	_traffic_lights()
 	_pedestrians()
+	_smokers()
 	_bounds_walls()
+	_decals()
 	_moon()
 
 
@@ -170,6 +200,81 @@ static func window_projector() -> ImageTexture:
 	return _window_projector
 
 
+# ================= PBR surfaces + wetness (REALISM R2) =================
+
+const MAT_DIR := "res://assets/materials/%s/%s_1K-JPG_%s.jpg"
+
+## ambientCG PBR set projected in world space, with wetness and puddles.
+func pbr(set_name: String, tile: float, tint := Color.WHITE, puddle := 0.5, normal := 0.55, dirt := 0.35) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = load("res://assets/shaders/wet_surface.gdshader")
+	m.set_shader_parameter("albedo_tex", load(MAT_DIR % [set_name, set_name, "Color"]))
+	m.set_shader_parameter("normal_tex", load(MAT_DIR % [set_name, set_name, "NormalGL"]))
+	m.set_shader_parameter("rough_tex", load(MAT_DIR % [set_name, set_name, "Roughness"]))
+	m.set_shader_parameter("tile_size", tile)
+	m.set_shader_parameter("tint", Vector3(tint.r, tint.g, tint.b))
+	m.set_shader_parameter("puddles", puddle)
+	m.set_shader_parameter("normal_strength", normal)
+	m.set_shader_parameter("dirt", dirt)
+	m.set_shader_parameter("wetness", wetness)
+	_wet_mats.append(m)
+	return m
+
+
+## 0 = dry night, 1 = soaked. Driven by the weather.
+func set_wetness(v: float) -> void:
+	wetness = clampf(v, 0.0, 1.0)
+	for m in _wet_mats:
+		m.set_shader_parameter("wetness", wetness)
+
+
+func set_rain(v: float) -> void:
+	for m in _wet_mats:
+		m.set_shader_parameter("rain", v)
+
+
+## The "used" layer: gum, oil, cracks, manholes, drains, grime at the foot of the facades.
+func _decals() -> void:
+	var g := group("Decals")
+	var add := func(kind: String, pos: Vector3, size: Vector3, rot_y := 0.0, mod := Color.WHITE) -> Decal:
+		var d := DecalKit.make(kind, size, mod)
+		d.position = pos
+		d.rotation_degrees.y = rot_y
+		g.add_child(d)
+		return d
+	# sidewalks: gum patches and cracks, every few metres
+	for side in [-1, 1]:
+		var x := X_MIN + 2.0
+		while x < X_MAX - 2.0:
+			var z: float = side * (ROAD_HW + 2.0) + _rng.randf_range(-1.2, 1.2)
+			add.call("gum", Vector3(x, 0.1, z), Vector3(3.0, 0.6, 3.0), _rng.randf() * 360.0)
+			if _rng.randf() < 0.45:
+				add.call("crack", Vector3(x + 1.5, 0.1, side * (ROAD_HW + 2.0) + _rng.randf_range(-1.5, 1.5)), Vector3(1.8, 0.6, 1.8), _rng.randf() * 360.0)
+			if _rng.randf() < 0.3:
+				add.call("oil", Vector3(x + 0.7, 0.1, z), Vector3(1.2, 0.6, 1.2), _rng.randf() * 360.0, Color(1, 1, 1, 0.6))
+			x += _rng.randf_range(4.0, 6.5)
+	# road: oil stains in the parking lanes, under the traffic lanes, manholes, drains at the kerb
+	for i in 34:
+		var ox := _rng.randf_range(X_MIN, X_MAX)
+		var oz: float = [-4.7, 4.7, -1.7, 1.7][i % 4] + _rng.randf_range(-0.4, 0.4)
+		add.call("oil", Vector3(ox, 0.05, oz), Vector3(_rng.randf_range(1.5, 3.5), 0.6, _rng.randf_range(1.2, 2.4)), _rng.randf() * 180.0)
+	for x in [-55.0, -22.0, 12.0, 46.0]:
+		add.call("manhole", Vector3(x, 0.05, 0.9), Vector3(0.9, 0.5, 0.9))
+	for x in range(-66, 70, 12):
+		for side in [-1, 1]:
+			add.call("drain", Vector3(x + 3.0, 0.05, side * (ROAD_HW - 0.35)), Vector3(0.9, 0.5, 0.5))
+	for i in 12:
+		add.call("crack", Vector3(_rng.randf_range(X_MIN, X_MAX), 0.05, _rng.randf_range(-5.5, 5.5)), Vector3(3.0, 0.6, 3.0), _rng.randf() * 360.0)
+	# grime along the foot of the shopfronts (wall decals: -Y into the wall)
+	for side in [-1, 1]:
+		var x := X_MIN + 3.0
+		while x < X_MAX - 3.0:
+			var d: Decal = add.call("grime", Vector3(x, 0.5, side * (LINE - 0.1)), Vector3(4.0, 0.8, 1.2))
+			d.rotation_degrees = Vector3(-90.0 if side == -1 else 90.0, 0.0, 0.0)
+			d.rotation_degrees.y = 0.0 if side == -1 else 180.0
+			x += 4.0
+
+
 func spawn_point() -> Vector3:
 	return to_global(spawn_local)
 
@@ -178,21 +283,21 @@ func spawn_point() -> Vector3:
 
 func _ground_and_roads() -> void:
 	var g := group("Streets")
-	var asphalt := mat(Color("24222b"), 0.85, "plaster", 0.25)
-	var walk := mat(Color("4b4856"), 0.9, "plaster", 0.35)
-	var curb := mat(Color("6e6a7a"), 0.8, "")
-	var paint := mat(Color("d9d6e0"), 0.7, "")
-	var yellow := mat(Color("e8c547"), 0.7, "")
+	var asphalt := pbr("Asphalt031", 4.0, Color(0.62, 0.62, 0.66), 0.55, 0.45)
+	var walk := pbr("PavingStones128", 2.4, Color(0.78, 0.77, 0.8), 0.35, 0.7)
+	var curb := pbr("Concrete034", 2.0, Color(0.7, 0.7, 0.72), 0.0, 0.4, 0.5)
+	var paint := mat(Color("b9b7c2"), 0.45, "")
+	var yellow := mat(Color("c9a93c"), 0.45, "")
 	# ground collision (everything walkable is at y = 0)
 	solid(Vector3(600, 1, 600), Vector3(0, -0.5, 0))
 	# far ground
-	part(g, box(Vector3(600, 0.1, 300 + WATER_Z)), Vector3(0, -0.08, (WATER_Z - 300) / 2.0), mat(Color("121019"), 1.0, "plaster", 0.1))
+	part(g, box(Vector3(600, 0.1, 300 + WATER_Z)), Vector3(0, -0.08, (WATER_Z - 300) / 2.0), pbr("Asphalt031", 5.0, Color(0.3, 0.3, 0.33), 0.3, 0.3))
 	# main road (continues into the dark both ways for traffic)
 	part(g, box(Vector3(300, 0.04, ROAD_HW * 2)), Vector3(0, 0.0, 0), asphalt)
 	for x in range(-148, 150, 6):
-		part(g, box(Vector3(3.0, 0.02, 0.18)), Vector3(x, 0.03, 0), paint)  # dashed centre line
+		_paint(g, Vector3(3.0, 0.004, 0.18), Vector3(x, 0.022, 0), paint)  # dashed centre line
 	for z in [-3.4, 3.4]:
-		part(g, box(Vector3(300, 0.02, 0.12)), Vector3(0, 0.03, z), paint)  # parking lane line
+		_paint(g, Vector3(300, 0.004, 0.12), Vector3(0, 0.022, z), paint)  # parking lane line
 	# sidewalks + curbs (visual height only, collision stays flat)
 	for side in [-1, 1]:
 		var z: float = side * (ROAD_HW + 2.0)
@@ -209,14 +314,19 @@ func _ground_and_roads() -> void:
 	# zebra crossings
 	for zx in [[-35.0, 0.0], [CROSS_X - 9.0, 0.0]]:
 		for i in 7:
-			part(g, box(Vector3(0.6, 0.02, ROAD_HW * 2 - 1.0)), Vector3(zx[0] - 2.4 + i * 0.8, 0.035, zx[1]), paint)
+			_paint(g, Vector3(0.6, 0.004, ROAD_HW * 2 - 1.0), Vector3(zx[0] - 2.4 + i * 0.8, 0.022, zx[1]), paint)
 	for i in 6:
-		part(g, box(Vector3(9.0, 0.02, 0.5)), Vector3(CROSS_X, 0.035, ROAD_HW + 1.4 + i * 0.7), paint)
+		_paint(g, Vector3(9.0, 0.004, 0.5), Vector3(CROSS_X, 0.022, ROAD_HW + 1.4 + i * 0.7), paint)
 	# yellow "no parking" in front of the casino
-	part(g, box(Vector3(20.0, 0.02, 0.14)), Vector3(-50.0, 0.035, ROAD_HW - 0.3), yellow)
+	_paint(g, Vector3(20.0, 0.004, 0.14), Vector3(-50.0, 0.022, ROAD_HW - 0.3), yellow)
 	# street name signs (Dutch blue plates)
 	_street_sign(g, Vector3(CROSS_X - 5.6, 0, LINE - 1.0), "Zuidkade", 0.0)
 	_street_sign(g, Vector3(CROSS_X + 5.6, 0, LINE + 2.0), "Maasboulevard", 90.0)
+
+
+func _paint(parent: Node3D, size: Vector3, pos: Vector3, m: Material) -> void:
+	var p := part(parent, box(size), pos, m)
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
 func _street_sign(parent: Node3D, pos: Vector3, text: String, rot_y: float) -> void:
@@ -228,6 +338,225 @@ func _street_sign(parent: Node3D, pos: Vector3, text: String, rot_y: float) -> v
 	part(s, box(Vector3(1.5, 0.32, 0.04)), Vector3(0, 2.6, 0), mat(Color("1d4fb8"), 0.6, ""))
 	text3d(s, text, Vector3(0, 2.6, 0.03), Color("f4f4f4"), 0.0036, Vector3.ZERO, 0.0)
 	text3d(s, text, Vector3(0, 2.6, -0.03), Color("f4f4f4"), 0.0036, Vector3(0, 180, 0), 0.0)
+
+
+# ================= Facades (REALISM R3) =================
+# Continuous rows of Rotterdam-style houses: pre-war brick, post-war "wederopbouw" and plaster.
+# Windows (interior-mapped) and their stone reveals are batched in MultiMeshes.
+
+const FACADE_STYLES := {
+	"prewar": {"wall": "Bricks097", "tile": 1.0, "win": Vector2(1.1, 1.9), "floor_h": 3.3, "lintel": true, "bands": true, "cornice": 0.7},
+	"wederopbouw": {"wall": "Bricks101", "tile": 1.3, "win": Vector2(2.2, 1.45), "floor_h": 3.0, "lintel": false, "bands": false, "cornice": 0.25},
+	"plaster": {"wall": "Plaster001", "tile": 3.0, "win": Vector2(1.25, 1.65), "floor_h": 3.1, "lintel": false, "bands": true, "cornice": 0.45},
+}
+const NORTH_ROW := [
+	[-65.0, 10.0, 4, "plaster", ""], [-54.5, 11.0, 5, "wederopbouw", ""], [-42.0, 14.0, 7, "wederopbouw", "home"],
+	[-28.0, 14.0, 4, "prewar", "music"], [-14.0, 14.0, 4, "prewar", "coffeeshop"], [0.0, 14.0, 3, "plaster", "snackbar"],
+	[11.0, 8.0, 4, "prewar", ""], [19.0, 8.0, 5, "prewar", ""], [30.0, 14.0, 4, "wederopbouw", "nightshop"],
+	[42.5, 11.0, 4, "plaster", ""], [53.5, 11.0, 5, "prewar", ""], [64.5, 11.0, 4, "wederopbouw", ""],
+]
+const SOUTH_ROW := [
+	[-65.5, 9.0, 4, "prewar", ""], [-34.5, 9.0, 4, "plaster", ""], [-24.0, 12.0, 5, "wederopbouw", "studio"],
+	[-13.5, 9.0, 4, "prewar", ""], [-3.5, 11.0, 4, "plaster", ""], [6.5, 9.0, 5, "prewar", ""],
+	[35.0, 12.0, 4, "prewar", ""], [46.5, 11.0, 5, "wederopbouw", ""], [56.5, 9.0, 4, "plaster", ""], [65.5, 9.0, 4, "prewar", ""],
+]
+const PLASTER_TINTS := [Color(0.86, 0.8, 0.68), Color(0.72, 0.78, 0.82), Color(0.85, 0.74, 0.66), Color(0.78, 0.8, 0.72)]
+
+var _win_batches := {}  # "w x h" -> {size, items: [[Transform3D, seed]]}
+var _reveal_batch: Array[Transform3D] = []
+var _wall_mats := {}
+
+
+func _wall_mat(style: String, variant: int) -> ShaderMaterial:
+	var key := "%s_%d" % [style, variant]
+	if _wall_mats.has(key):
+		return _wall_mats[key]
+	var st: Dictionary = FACADE_STYLES[style]
+	var tint: Color = Color(0.85, 0.82, 0.8) if style != "plaster" else PLASTER_TINTS[variant % PLASTER_TINTS.size()]
+	if style == "prewar":
+		tint = [Color(0.8, 0.74, 0.7), Color(0.62, 0.55, 0.52), Color(0.9, 0.8, 0.72)][variant % 3]
+	elif style == "wederopbouw":
+		tint = [Color(0.72, 0.62, 0.55), Color(0.55, 0.48, 0.45)][variant % 2]
+	var m := pbr(st.wall, st.tile, tint, 0.0, 0.7, 0.55)
+	_wall_mats[key] = m
+	return m
+
+
+func _facades() -> void:
+	var stone := pbr("Concrete034", 1.5, Color(0.78, 0.76, 0.72), 0.0, 0.4, 0.5)
+	var dark_stone := pbr("Concrete047A", 2.0, Color(0.42, 0.41, 0.43), 0.0, 0.5, 0.6)
+	var i := 0
+	for spec in NORTH_ROW:
+		_facade(spec, -1, i, stone, dark_stone)
+		i += 1
+	for spec in SOUTH_ROW:
+		_facade(spec, 1, i, stone, dark_stone)
+		i += 1
+	_flush_facade_batches(stone)
+
+
+func _facade(spec: Array, side: int, idx: int, stone: Material, dark_stone: Material) -> void:
+	var x: float = spec[0]
+	var w: float = spec[1]
+	var floors: int = spec[2]
+	var style: String = spec[3]
+	var shop: String = spec[4]
+	var st: Dictionary = FACADE_STYLES[style]
+	var plinth := 5.0 if shop != "" and shop != "home" else 4.2
+	var fh: float = st.floor_h
+	var top := plinth + floors * fh
+	var g := Node3D.new()
+	g.name = "Facade_%d" % idx
+	g.position = Vector3(x, 0, side * LINE)
+	g.rotation_degrees.y = 0.0 if side == -1 else 180.0
+	add_child(g)
+	var wall := _wall_mat(style, idx)
+	# body (10 m deep) + collision
+	part(g, box(Vector3(w, top + 0.4, 10.0)), Vector3(0, (top + 0.4) / 2.0, -5.0), wall)
+	solid(Vector3(w, top, 10.0), Vector3(x, top / 2.0, side * (LINE + 5.0)))
+	# plinth band
+	part(g, box(Vector3(w + 0.05, 0.4, 0.3)), Vector3(0, plinth, 0.1), stone)
+	if shop == "":
+		_plinth(g, w, plinth, dark_stone, idx)
+	# floors: windows, reveals, sills, lintels, bands
+	var win: Vector2 = st.win
+	var cols := maxi(2, int((w - 1.2) / (win.x + 1.1)))
+	var pitch := w / cols
+	for f in floors:
+		var y0 := plinth + 0.35 + f * fh + 0.75
+		var cy := y0 + win.y / 2.0
+		if st.bands and f > 0:
+			part(g, box(Vector3(w, 0.14, 0.12)), Vector3(0, plinth + 0.35 + f * fh, 0.06), stone)
+		for c in cols:
+			var cx := -w / 2.0 + pitch * (c + 0.5)
+			_window(g, Vector3(cx, cy, 0.0), win, st.lintel)
+	# cornice + parapet
+	var cor: float = st.cornice
+	part(g, box(Vector3(w + 0.3, cor, 0.45)), Vector3(0, top + cor / 2.0, 0.15), stone)
+	if style == "prewar":
+		part(g, box(Vector3(w + 0.1, 0.18, 0.6)), Vector3(0, top - 0.1, 0.25), stone)
+	# zinc drainpipe on one edge
+	var px := w / 2.0 - 0.2 if idx % 2 == 0 else -w / 2.0 + 0.2
+	part(g, cyl(0.06, top), Vector3(px, top / 2.0, 0.12), mat(Color("6c6f76"), 0.35, ""))
+	# roof clutter
+	var roof_y := top + cor
+	for k in _rng.randi_range(1, 3):
+		var rx := _rng.randf_range(-w / 2.0 + 1.0, w / 2.0 - 1.0)
+		match _rng.randi() % 4:
+			0, 1:
+				part(g, box(Vector3(0.7, 1.4, 0.7)), Vector3(rx, roof_y + 0.7, -_rng.randf_range(2, 8)), wall)
+			2:
+				part(g, box(Vector3(1.1, 0.8, 0.8)), Vector3(rx, roof_y + 0.4, -_rng.randf_range(2, 8)), mat(Color("8c8f96"), 0.4, ""))
+			3:
+				part(g, cyl(0.03, 2.4), Vector3(rx, roof_y + 1.2, -3.0), mat(Color("3a3c42"), 0.4, ""))
+				part(g, box(Vector3(1.2, 0.04, 0.04)), Vector3(rx, roof_y + 2.1, -3.0), mat(Color("3a3c42"), 0.4, ""))
+	# wall grime under every window column (rain streaks)
+	if _rng.randf() < 0.7:
+		var d := DecalKit.make("grime", Vector3(w * 0.9, 0.6, plinth * 0.5), Color(1, 1, 1, 0.5))
+		g.add_child(d)
+		d.position = Vector3(0, plinth + 0.8, 0.0)
+		d.rotation_degrees = Vector3(-90, 0, 0)
+
+
+## Ground floor of a house without a shop: a front door and either a closed shop (shutter + tag) or a window.
+func _plinth(g: Node3D, w: float, h: float, dark_stone: Material, idx: int) -> void:
+	part(g, box(Vector3(w, h - 0.2, 0.15)), Vector3(0, (h - 0.2) / 2.0, 0.07), dark_stone)
+	var door_x := -w / 2.0 + 1.4 if idx % 2 == 0 else w / 2.0 - 1.4
+	part(g, box(Vector3(1.2, 2.4, 0.12)), Vector3(door_x, 1.2, 0.12), mat(Color("2a2420"), 0.6, "wood", 1.0))
+	part(g, box(Vector3(1.4, 0.12, 0.3)), Vector3(door_x, 2.5, 0.2), dark_stone)
+	part(g, box(Vector3(0.05, 0.25, 0.05)), Vector3(door_x + 0.4, 1.15, 0.2), mat(Color("b8b2a0"), 0.3, ""))
+	var rest := w - 3.2
+	var rx := w / 2.0 - 1.6 - rest / 2.0 if idx % 2 == 0 else -w / 2.0 + 1.6 + rest / 2.0
+	if idx % 3 != 1:
+		# closed shop: ribbed shutter, faded sign plate, graffiti
+		part(g, box(Vector3(rest, 3.0, 0.1)), Vector3(rx, 1.55, 0.14), _shutter_mat())
+		part(g, box(Vector3(rest, 0.6, 0.08)), Vector3(rx, 3.45, 0.15), mat(Color("3b3a40"), 0.7, "plaster"))
+		var tag := DecalKit.make("tag", Vector3(rest * 0.7, 0.6, 1.6))
+		g.add_child(tag)
+		tag.position = Vector3(rx, 1.4, 0.15)
+		tag.rotation_degrees = Vector3(-90, 0, 0)
+	else:
+		_window(g, Vector3(rx, 2.0, 0.0), Vector2(minf(rest - 0.6, 3.0), 1.8), false)
+
+
+var _shutter: StandardMaterial3D
+func _shutter_mat() -> StandardMaterial3D:
+	if _shutter:
+		return _shutter
+	var img := Image.create(8, 64, true, Image.FORMAT_RGB8)
+	for y in 64:
+		var v := 0.5 + 0.18 * sin(y / 64.0 * TAU * 8.0)
+		for x in 8:
+			img.set_pixel(x, y, Color(v, v, v * 1.03))
+	img.generate_mipmaps()
+	_shutter = StandardMaterial3D.new()
+	_shutter.albedo_texture = ImageTexture.create_from_image(img)
+	_shutter.albedo_color = Color(0.55, 0.56, 0.6)
+	_shutter.uv1_triplanar = true
+	_shutter.uv1_scale = Vector3(1, 1.0 / 0.95, 1) * 0.6
+	_shutter.metallic = 0.5
+	_shutter.roughness = 0.45
+	return _shutter
+
+
+## A window at `c` (local to facade g): stone reveals around it, a sill, maybe a lintel, and an
+## interior-mapped glass quad, all queued for the MultiMesh batches.
+func _window(g: Node3D, c: Vector3, size: Vector2, lintel: bool) -> void:
+	var to_city := g.transform
+	var depth := 0.24
+	var t := 0.12
+	var reveal_specs := [
+		[Vector3(c.x - size.x / 2.0 - t / 2.0, c.y, depth / 2.0), Vector3(t, size.y + t * 2.0, depth)],
+		[Vector3(c.x + size.x / 2.0 + t / 2.0, c.y, depth / 2.0), Vector3(t, size.y + t * 2.0, depth)],
+		[Vector3(c.x, c.y + size.y / 2.0 + t / 2.0, depth / 2.0), Vector3(size.x, t, depth)],
+		[Vector3(c.x, c.y - size.y / 2.0 - 0.05, depth / 2.0 + 0.05), Vector3(size.x + 0.3, 0.1, depth + 0.1)],  # sill
+	]
+	if lintel:
+		reveal_specs.append([Vector3(c.x, c.y + size.y / 2.0 + 0.25, 0.08), Vector3(size.x + 0.5, 0.3, 0.16)])
+	for r in reveal_specs:
+		_reveal_batch.append(to_city * Transform3D(Basis().scaled(r[1]), r[0]))
+	var key := "%.2fx%.2f" % [size.x, size.y]
+	if not _win_batches.has(key):
+		_win_batches[key] = {"size": size, "items": []}
+	_win_batches[key].items.append([to_city * Transform3D(Basis(), Vector3(c.x, c.y, 0.02)), _rng.randf()])
+
+
+func _flush_facade_batches(stone: Material) -> void:
+	var g := group("FacadeBatches")
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = box(Vector3.ONE)
+	mm.instance_count = _reveal_batch.size()
+	for i in _reveal_batch.size():
+		mm.set_instance_transform(i, _reveal_batch[i])
+	var mmi := MultiMeshInstance3D.new()
+	mmi.name = "Reveals"
+	mmi.multimesh = mm
+	mmi.material_override = stone
+	g.add_child(mmi)
+	var shader: Shader = load("res://assets/shaders/interior_window.gdshader")
+	for key in _win_batches.keys():
+		var b: Dictionary = _win_batches[key]
+		var q := QuadMesh.new()
+		q.size = b.size
+		var wm := MultiMesh.new()
+		wm.transform_format = MultiMesh.TRANSFORM_3D
+		wm.use_custom_data = true
+		wm.mesh = q
+		wm.instance_count = b.items.size()
+		for i in b.items.size():
+			wm.set_instance_transform(i, b.items[i][0])
+			wm.set_instance_custom_data(i, Color(b.items[i][1], 0, 0, 0))
+		var sm := ShaderMaterial.new()
+		sm.shader = shader
+		sm.set_shader_parameter("win_size", b.size)
+		sm.set_shader_parameter("lit_chance", 0.42)
+		var wi := MultiMeshInstance3D.new()
+		wi.name = "Windows_" + key
+		wi.multimesh = wm
+		wi.material_override = sm
+		wi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		g.add_child(wi)
 
 
 # ================= Buildings =================
@@ -244,10 +573,6 @@ func _building(model: String, x: float, side: int, rot: float = 0.0, scl: float 
 
 func _north_side() -> void:
 	var fillers := ["building-f", "building-l", "building-k", "building-h", "building-a", "building-c", "building-n"]
-	var slots := {-56.0: "building-f", -42.0: "building-m", -28.0: "building-k", -14.0: "building-c",
-		0.0: "building-e", 14.0: "building-l", 30.0: "building-a", 44.0: "building-n", 58.0: "building-h"}
-	for x in slots.keys():
-		_building(slots[x], x, -1)
 	# backdrop row behind (rooftops seen from the quay / street)
 	for i in 12:
 		var m: String = fillers[i % fillers.size()]
@@ -255,13 +580,9 @@ func _north_side() -> void:
 	for s in SHOPS:
 		if s.side == -1:
 			_storefront(s)
-	_alleys(-1, slots.keys())
 
 
 func _south_side() -> void:
-	var slots := {-24.0: "building-i", -6.0: "building-b", 40.0: "building-g", 56.0: "building-d", -66.0: "building-j"}
-	for x in slots.keys():
-		_building(slots[x], x, 1)
 	for s in SHOPS:
 		if s.side == 1:
 			_storefront(s)
@@ -279,7 +600,9 @@ func _south_side() -> void:
 				_cafe_front(Vector3(x, 0, QUAY_Z))
 		x += 12.0
 		i += 1
-	_alleys(1, [-24.0, -6.0, 40.0, 56.0])
+	# dumpsters in the side street
+	for z in [14.0, 22.0]:
+		kit(self, "detail-dumpster-closed", Vector3(CROSS_X - 8.4, 0, z), 90.0, 3.6, {}, RETRO)
 
 
 ## Dark gaps between buildings: dumpsters, a cable, a glowing back door.
@@ -314,7 +637,11 @@ func _storefront(s: Dictionary) -> void:
 		# shop window: lit interior with a few silhouettes behind the glass
 		var ww := w * 0.56
 		var wx := -w * 0.19
-		part(g, box(Vector3(ww, 2.5, 0.05)), Vector3(wx, 1.6, 0.34), glow(Color(s.glass).darkened(0.25), 0.2))
+		var glass_m := glow(Color(s.glass).darkened(0.25), 0.2)
+		glass_m.albedo_color = Color(0.04, 0.05, 0.06)
+		glass_m.roughness = 0.05
+		part(g, box(Vector3(ww, 2.5, 0.05)), Vector3(wx, 1.6, 0.34), glass_m)
+		_shop_reg(str(s.id)).mats.append(glass_m)
 		for i in 3:
 			part(g, box(Vector3(0.08, 2.5, 0.08)), Vector3(wx - ww / 2.0 + ww * (i + 1) / 4.0, 1.6, 0.37), frame)
 		_window_dressing(g, str(s.id), wx, ww)
@@ -325,7 +652,11 @@ func _storefront(s: Dictionary) -> void:
 	# door
 	var dx: float = w * 0.32 if not is_home else 0.0
 	part(g, box(Vector3(1.7, 2.7, 0.1)), Vector3(dx, 1.35, 0.33), frame)
-	part(g, box(Vector3(1.4, 2.45, 0.05)), Vector3(dx, 1.25, 0.37), glow(Color(s.glass).darkened(0.45), 0.25))
+	var door_m := glow(Color(s.glass).darkened(0.45), 0.25)
+	door_m.albedo_color = Color(0.04, 0.05, 0.06)
+	door_m.roughness = 0.05
+	part(g, box(Vector3(1.4, 2.45, 0.05)), Vector3(dx, 1.25, 0.37), door_m)
+	_shop_reg(str(s.id)).mats.append(door_m)
 	part(g, box(Vector3(0.06, 0.5, 0.06)), Vector3(dx - 0.45, 1.2, 0.43), mat(Color("c9c9d4"), 0.3, ""))
 	var door := solid(Vector3(1.8, 2.7, 0.6), g.transform * Vector3(dx, 1.35, 0.5), "shop", str(s.door), g.rotation_degrees.y)
 	door.set_meta("shop_id", s.id)
@@ -350,7 +681,12 @@ func _storefront(s: Dictionary) -> void:
 	l.omni_range = 7.5
 	l.light_volumetric_fog_energy = 0.6
 	add_child(l)
+	_shop_reg(str(s.id)).lights.append(l)
 	if not is_home:
+		# roller shutter, down when the shop is closed
+		var sh := part(g, box(Vector3(w * 0.94, 3.05, 0.08)), Vector3(0, 1.55, 0.46), _shutter_mat())
+		sh.visible = false
+		_shop_reg(str(s.id)).shutter = sh
 		# warm white shop light falling out of the window onto the wet sidewalk
 		var sp := SpotLight3D.new()
 		g.add_child(sp)
@@ -362,6 +698,7 @@ func _storefront(s: Dictionary) -> void:
 		sp.spot_angle = 48.0
 		sp.light_projector = window_projector()
 		sp.light_volumetric_fog_energy = 0.3
+		_shop_reg(str(s.id)).lights.append(sp)
 
 
 ## Things visible behind each shop window.
@@ -497,16 +834,23 @@ func _casino() -> void:
 func _process(delta: float) -> void:
 	if _chip:
 		_chip.rotation.y += delta * 0.8
+	_tick_signals(delta)
 	_drive(delta)
+	if _rain and player and is_instance_valid(player):
+		_rain.global_position = player.global_position + Vector3(0, 9.0, 0)
+	_greet_t -= delta
+	if _greet_t <= 0.0:
+		_greet_t = 0.5
+		_greet()
 
 
 # ================= Quay, river, bridge, skyline =================
 
 func _quay_and_river() -> void:
 	var g := group("Quay")
-	var stone := mat(Color("5a5664"), 0.9, "plaster", 0.4)
+	var stone := pbr("PavingStones150", 3.0, Color(0.72, 0.7, 0.72), 0.45, 0.7)
 	part(g, box(Vector3(140, 0.12, WATER_Z - QUAY_Z)), Vector3(0, 0.06, (QUAY_Z + WATER_Z) / 2.0), stone)
-	part(g, box(Vector3(300, 3.0, 0.8)), Vector3(0, -1.5, WATER_Z + 0.4), mat(Color("2a2832"), 0.9, "plaster"))
+	part(g, box(Vector3(300, 3.0, 0.8)), Vector3(0, -1.5, WATER_Z + 0.4), pbr("Concrete047A", 3.0, Color(0.45, 0.45, 0.48), 0.0, 0.5, 0.6))
 	# railing
 	var rail := mat(Color("5c5a68"), 0.35, "")
 	part(g, cyl(0.05, 140.0), Vector3(0, 1.05, WATER_Z - 0.2), rail, Vector3(0, 0, 90))
@@ -651,7 +995,7 @@ func _street_props() -> void:
 	var grate := mat(Color("26232e"), 0.6, "")
 	for spec in [[-58.0, -1], [-35.0, -1], [7.0, -1], [37.0, -1], [63.0, -1], [-36.0, 1], [2.0, 1], [46.0, 1], [64.0, 1]]:
 		var tp := Vector3(spec[0], 0, spec[1] * (ROAD_HW + 1.0))
-		kit(g, "tree-large", tp, _rng.randf_range(0, 90), 3.0, {}, RETRO)
+		kit(g, "tree-large", tp, _rng.randf_range(0, 90), 3.0, {"treeA": _tree_mat()}, RETRO)
 		part(g, box(Vector3(1.3, 0.14, 1.3)), tp + Vector3(0, 0.07, 0), grate)
 		solid(Vector3(0.5, 3.0, 0.5), tp + Vector3(0, 1.5, 0))
 	# benches
@@ -687,6 +1031,20 @@ func _street_props() -> void:
 		g.add_child(wl)
 
 
+var _tree_m: ShaderMaterial
+func _tree_mat() -> ShaderMaterial:
+	if _tree_m:
+		return _tree_m
+	_tree_m = ShaderMaterial.new()
+	_tree_m.shader = load("res://assets/shaders/kenney_tint.gdshader")
+	_tree_m.set_shader_parameter("colormap", load("res://assets/models/kenney_retro_urban/Textures/treeA.png"))
+	_tree_m.set_shader_parameter("saturation", 0.75)
+	_tree_m.set_shader_parameter("value", 0.38)
+	_tree_m.set_shader_parameter("roughness_base", 0.85)
+	_tree_m.set_shader_parameter("metallic_base", 0.0)
+	return _tree_m
+
+
 func _bike(parent: Node3D, pos: Vector3, rot_y: float, color: Color) -> void:
 	var b := Node3D.new()
 	b.position = pos
@@ -709,7 +1067,7 @@ func _bike(parent: Node3D, pos: Vector3, rot_y: float, color: Color) -> void:
 # ================= Cars =================
 
 func _car(model: String, pos: Vector3, rot_y: float, driving := false) -> Node3D:
-	var c := kit(self, model, pos, rot_y, CAR_SCALE, {}, CARS)
+	var c := kit(self, model, pos, rot_y, CAR_SCALE, {"colormap": _car_mat}, CARS)
 	# head + tail lights
 	var sz: Vector3 = c.get_meta("size")
 	var lights := Node3D.new()
@@ -761,34 +1119,283 @@ func _traffic() -> void:
 	var models := ["taxi", "sedan", "suv", "van", "hatchback-sports"]
 	for i in 4:
 		var dir := 1 if i % 2 == 0 else -1
-		var lane := -1.7 if dir == 1 else 1.7
+		var lane := 1.7 if dir == 1 else -1.7  # the Netherlands: drive on the right
 		var x := _rng.randf_range(-140, 140)
 		var c := _car(models[i % models.size()], Vector3(x, 0, lane), 90.0 if dir == 1 else -90.0, true)
-		cars.append({"node": c, "dir": dir, "lane": lane, "speed": _rng.randf_range(8.0, 11.0), "cur": 9.0})
+		cars.append({"node": c, "dir": dir, "lane": lane, "speed": _rng.randf_range(8.0, 11.0), "cur": 9.0, "len": 4.6})
 
 
 func _drive(delta: float) -> void:
 	var ppos := to_local(player.global_position) if player and is_instance_valid(player) else Vector3(9999, 0, 9999)
 	for c in cars:
 		var n: Node3D = c.node
+		var half: float = c.len / 2.0
 		var ahead: float = (ppos.x - n.position.x) * c.dir
-		var blocked := absf(ppos.z - c.lane) < 2.2 and ahead > 0.0 and ahead < 9.0
-		# brake for the player and for the car in front
+		var blocked := absf(ppos.z - c.lane) < 2.2 and ahead > 0.0 and ahead < half + 6.0
+		if blocked and c.has("bell") and not (c.bell as AudioStreamPlayer3D).playing:
+			(c.bell as AudioStreamPlayer3D).play()
+		# brake for the car (or tram) in front
 		for o in cars:
 			if o != c and o.dir == c.dir:
 				var gap: float = (o.node.position.x - n.position.x) * c.dir
-				if gap > 0.0 and gap < 8.0:
+				if gap > 0.0 and gap < half + o.len / 2.0 + 3.0:
 					blocked = true
+		# red light at the junction: stop before the line
+		if _signal_state != 0:
+			var stop_x: float = CROSS_X - 7.5 if c.dir == 1 else CROSS_X + 7.5
+			var to_line: float = (stop_x - n.position.x) * c.dir - half
+			if to_line > -0.5 and to_line < 14.0:
+				blocked = true
 		var target: float = 0.0 if blocked else c.speed
 		c.cur = move_toward(c.cur, target, (18.0 if blocked else 5.0) * delta)
 		n.position.x += c.dir * c.cur * delta
+		if not n.has_meta("brake"):
+			if n.position.x * c.dir > 150.0:
+				n.position.x = -150.0 * c.dir
+			continue
 		var bm: StandardMaterial3D = n.get_meta("brake")
 		var braking: bool = c.cur < c.speed * 0.6
 		bm.emission_energy_multiplier = 4.0 if braking else 0.8
-		var tl: OmniLight3D = n.get_meta("tail")
-		tl.light_energy = 2.2 if braking else 0.6
+		if n.has_meta("tail"):
+			var tl: OmniLight3D = n.get_meta("tail")
+			tl.light_energy = 2.2 if braking else 0.6
 		if n.position.x * c.dir > 150.0:
 			n.position.x = -150.0 * c.dir
+
+
+# ================= Shops: opening hours (REALISM R4) =================
+
+func _shop_reg(id: String) -> Dictionary:
+	if not _shop_state.has(id):
+		_shop_state[id] = {"shutter": null, "lights": [], "mats": []}
+	return _shop_state[id]
+
+
+func is_open(id: String, minutes: int) -> bool:
+	return minutes < int(HOURS.get(id, 99999))
+
+
+func closing_text(id: String) -> String:
+	var m := int(HOURS.get(id, 99999)) % (24 * 60)
+	return "%02d:%02d" % [m / 60, m % 60]
+
+
+## Shutters down, lights off for closed shops.
+func update_hours(minutes: int) -> void:
+	for id in _shop_state.keys():
+		var open := is_open(id, minutes)
+		if _open.get(id, null) == open:
+			continue
+		_open[id] = open
+		var st: Dictionary = _shop_state[id]
+		if st.shutter:
+			(st.shutter as Node3D).visible = not open
+		for l in st.lights:
+			(l as Light3D).visible = open
+		for m in st.mats:
+			(m as StandardMaterial3D).emission_energy_multiplier = (0.2 if open else 0.0)
+
+
+# ================= Weather & ambience (REALISM R5) =================
+
+func apply_weather(w: String) -> void:
+	weather = w
+	if not _rain:
+		_build_rain()
+		_build_ambience()
+	var raining := w == "rain"
+	_rain.emitting = raining
+	_rain.visible = raining
+	set_rain(1.0 if raining else 0.0)
+	set_wetness(1.0 if raining else (0.75 if w == "mist" else 0.45))
+	city_env.volumetric_fog_density = 0.028 if w == "mist" else (0.011 if raining else 0.007)
+	_amb_rain.volume_db = -6.0 if raining else -80.0
+	# fewer people out in the rain
+	for i in pedestrians.size():
+		pedestrians[i].visible = not raining or i % 2 == 0
+
+
+func set_audio_active(on: bool) -> void:
+	if not _amb_city:
+		return
+	for p in [_amb_city, _amb_rain, _amb_water]:
+		if on and not p.playing:
+			p.play()
+		elif not on:
+			p.stop()
+
+
+func _build_rain() -> void:
+	_rain = GPUParticles3D.new()
+	_rain.name = "Rain"
+	_rain.amount = 3500
+	_rain.lifetime = 1.1
+	_rain.local_coords = false
+	_rain.visibility_aabb = AABB(Vector3(-30, -30, -30), Vector3(60, 60, 60))
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	pm.emission_box_extents = Vector3(22, 1, 22)
+	pm.direction = Vector3(0.08, -1, 0.04)
+	pm.spread = 2.0
+	pm.initial_velocity_min = 15.0
+	pm.initial_velocity_max = 19.0
+	pm.gravity = Vector3(0, -2, 0)
+	_rain.process_material = pm
+	var drop := BoxMesh.new()
+	drop.size = Vector3(0.012, 0.5, 0.012)
+	var dm := StandardMaterial3D.new()
+	dm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	dm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	dm.albedo_color = Color(0.75, 0.8, 0.9, 0.28)
+	drop.material = dm
+	_rain.draw_pass_1 = drop
+	_rain.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_rain)
+
+
+func _build_ambience() -> void:
+	_amb_city = AudioStreamPlayer.new()
+	_amb_city.stream = AmbienceSynth.city()
+	_amb_city.volume_db = -14.0
+	add_child(_amb_city)
+	_amb_rain = AudioStreamPlayer.new()
+	_amb_rain.stream = AmbienceSynth.rain()
+	_amb_rain.volume_db = -80.0
+	add_child(_amb_rain)
+	_amb_water = AudioStreamPlayer3D.new()
+	_amb_water.stream = AmbienceSynth.water()
+	_amb_water.position = Vector3(CROSS_X, 0.5, WATER_Z)
+	_amb_water.unit_size = 10.0
+	_amb_water.volume_db = -4.0
+	add_child(_amb_water)
+
+
+# ================= Tram, rails, overhead wires, traffic lights (REALISM R4) =================
+
+func _tram_lines() -> void:
+	var g := group("TramLines")
+	var rail := mat(Color("8d8f96"), 0.25, "")
+	rail.metallic = 0.8
+	for lane in [-1.7, 1.7]:
+		for off in [-0.72, 0.72]:
+			part(g, box(Vector3(300, 0.025, 0.08)), Vector3(0, 0.035, lane + off), rail)
+		var wire := part(g, cyl(0.015, 300), Vector3(0, 6.3, lane), mat(Color("222228"), 0.5, ""), Vector3(0, 0, 90))
+		wire.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# span wires from facade to facade every 25 m
+	for x in range(-62, 70, 25):
+		var span := part(g, cyl(0.012, LINE * 2.0), Vector3(x, 6.6, 0), mat(Color("222228"), 0.5, ""), Vector3(90, 0, 0))
+		span.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+func _tram() -> void:
+	var t := Node3D.new()
+	t.name = "Tram"
+	add_child(t)
+	var body := mat(Color("2c2f36"), 0.35, "")
+	body.metallic = 0.2
+	var stripe := mat(Color("1fa39a"), 0.4, "")
+	var win_m := glow(Color("ffe2b8"), 0.9)
+	var glass := mat(Color("0d0f14"), 0.08, "")
+	for seg in 3:
+		var z := -9.4 + seg * 9.4
+		part(t, box(Vector3(2.5, 3.0, 9.0)), Vector3(0, 1.85, z), body)
+		part(t, box(Vector3(2.52, 0.25, 9.02)), Vector3(0, 0.75, z), stripe)
+		part(t, box(Vector3(2.54, 1.0, 7.6)), Vector3(0, 2.15, z), glass)
+		for side in [-1.0, 1.0]:
+			part(t, box(Vector3(0.02, 0.9, 7.4)), Vector3(side * 1.275, 2.15, z), win_m)
+		if seg < 2:
+			part(t, box(Vector3(2.3, 2.7, 0.5)), Vector3(0, 1.75, z + 4.7), mat(Color("15161a"), 0.9, "fabric"))
+	part(t, box(Vector3(0.1, 0.9, 1.2)), Vector3(0, 3.8, 0), mat(Color("444"), 0.4, ""), Vector3(25, 0, 0))  # pantograph
+	part(t, box(Vector3(1.4, 0.06, 0.1)), Vector3(0, 4.25, 0.2), mat(Color("444"), 0.4, ""))
+	var dest := text3d(t, "4  ZUIDKADE", Vector3(0, 3.05, 14.06), Color("ffb547"), 0.004, Vector3.ZERO, 3.0)
+	dest.name = "Dest"
+	t.rotation_degrees.y = 90.0
+	t.position = Vector3(-120, 0, 1.7)
+	var hl := SpotLight3D.new()
+	t.add_child(hl)
+	hl.position = Vector3(0, 0.9, 14.2)
+	hl.rotation_degrees = Vector3(-6, 180, 0)
+	hl.light_color = Color("fff3dc")
+	hl.light_energy = 5.0
+	hl.spot_range = 22.0
+	hl.spot_angle = 30.0
+	var inner := OmniLight3D.new()
+	t.add_child(inner)
+	inner.position = Vector3(0, 2.4, 0)
+	inner.light_color = Color("ffe2b8")
+	inner.light_energy = 1.2
+	inner.omni_range = 7.0
+	var bell := AudioStreamPlayer3D.new()
+	bell.stream = AmbienceSynth.tram_bell()
+	bell.unit_size = 12.0
+	t.add_child(bell)
+	cars.append({"node": t, "dir": 1, "lane": 1.7, "speed": 7.0, "cur": 7.0, "len": 28.5, "bell": bell})
+
+
+func _traffic_lights() -> void:
+	var g := group("TrafficLights")
+	var pole := mat(Color("3a3d44"), 0.4, "")
+	# east-bound lane is on the south half (z > 0), west-bound on the north half
+	for spec in [[CROSS_X - 7.5, ROAD_HW + 0.6, 90.0], [CROSS_X + 7.5, -(ROAD_HW + 0.6), -90.0]]:
+		var p := Node3D.new()
+		p.position = Vector3(spec[0], 0, spec[1])
+		p.rotation_degrees.y = spec[2] + 180.0
+		g.add_child(p)
+		part(p, cyl(0.08, 3.4), Vector3(0, 1.7, 0), pole)
+		part(p, box(Vector3(0.38, 1.1, 0.28)), Vector3(0, 3.0, 0), mat(Color("17181c"), 0.6, ""))
+		var mats := []
+		for k in 3:
+			var c: Color = [Color("39ff7a"), Color("ffb020"), Color("ff2a2a")][k]
+			var m := glow(c, 0.0)
+			part(p, sphere(0.1), Vector3(0, 3.3 - k * 0.3, 0.15), m)
+			mats.append(m)
+		_signal_lamps.append(mats)
+		# stop line
+		part(g, box(Vector3(0.4, 0.02, ROAD_HW - 0.2)), Vector3(spec[0], 0.036, signf(spec[1]) * (ROAD_HW - 0.2) / 2.0), mat(Color("b9b7c2"), 0.45, ""))
+	_apply_signal()
+
+
+func _tick_signals(delta: float) -> void:
+	_signal_t += delta
+	var durations := [22.0, 3.0, 16.0]
+	if _signal_t >= durations[_signal_state]:
+		_signal_t = 0.0
+		_signal_state = (_signal_state + 1) % 3
+		_apply_signal()
+
+
+func _apply_signal() -> void:
+	for mats in _signal_lamps:
+		for k in 3:
+			(mats[k] as StandardMaterial3D).emission_energy_multiplier = 6.0 if k == _signal_state else 0.0
+
+
+# ================= Life on the street =================
+
+func _smokers() -> void:
+	for i in 2:
+		var n := NPC.new()
+		n.name = "Smoker%d" % i
+		add_child(n)
+		n.setup({"model": ["worker_male", "casual_female"][i], "recolor": {}, "voice_hz": [115.0, 220.0][i], "accessory": ""})
+		n.position = Vector3(4.6 + i * 1.1, 0, -(ROAD_HW + 2.6))
+		n.rotation.y = deg_to_rad(-60.0 + i * 140.0)
+		var ember := part(n, sphere(0.018), Vector3(0.22, 1.32, 0.18), glow(Color("ff6a1a"), 6.0))
+		ember.name = "Ember"
+		pedestrians.append(n)
+
+
+## People recognise you once you have a name in the scene.
+func _greet() -> void:
+	if not game or not player or game.reputation < 10:
+		return
+	for p in pedestrians:
+		if not p.visible or _greeted.has(p.name):
+			continue
+		if p.global_position.distance_to(player.global_position) < 3.2:
+			_greeted[p.name] = true
+			var lines := ["Yo! You're the producer from Kade 17, right?", "Bro, that last track is on my playlist.", "Kade 17! When are you dropping again?", "My cousin says you made that beat. Respect."]
+			p.say(lines[randi() % lines.size()], 3.5)
 
 
 # ================= Pedestrians =================

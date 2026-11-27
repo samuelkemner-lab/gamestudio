@@ -22,6 +22,7 @@ var total_streams := 0
 # gift = neighbours got stroopwafels (noise rises slower tonight)
 var buffs := {"chill": 0, "awake": 0, "gift": false}
 var casino_net := 0
+var weather := "rain"  # "dry" | "rain" | "mist"  (Rotterdam in November: it rains a lot)
 
 
 func add(money_delta: int, rep_delta: int, cred_delta: int) -> void:
@@ -78,6 +79,12 @@ func spend(amount: int) -> bool:
 	return true
 
 
+## New night, new weather: ~40% rain, ~20% mist, otherwise dry (but the streets stay damp).
+func roll_weather(r := -1.0) -> void:
+	var v := randf() if r < 0.0 else r
+	weather = "rain" if v < 0.4 else ("mist" if v < 0.6 else "dry")
+
+
 func has(upgrade: String) -> bool:
 	return upgrade in upgrades
 
@@ -130,6 +137,7 @@ func sleep() -> Dictionary:
 	booked_today.clear()
 	buffs.awake = 0
 	buffs.gift = false
+	roll_weather()
 	changed.emit()
 	save()
 	return {"day": day, "earned": earned, "streams": streams_night, "lines": lines, "leak": leak}
@@ -149,6 +157,7 @@ func reset() -> void:
 	total_streams = 0
 	buffs = {"chill": 0, "awake": 0, "gift": false}
 	casino_net = 0
+	weather = "rain"
 	changed.emit()
 
 
@@ -161,7 +170,7 @@ func save() -> void:
 			"money": money, "reputation": reputation, "street_cred": street_cred,
 			"sessions": sessions, "tracks": tracks, "day": day, "upgrades": upgrades,
 			"booked_today": booked_today, "total_streams": total_streams,
-			"buffs": buffs, "casino_net": casino_net,
+			"buffs": buffs, "casino_net": casino_net, "weather": weather,
 		}))
 
 
@@ -183,4 +192,5 @@ func load_game() -> void:
 		if b is Dictionary:
 			buffs.merge(b, true)
 		casino_net = int(d.get("casino_net", 0))
+		weather = str(d.get("weather", weather))
 	changed.emit()

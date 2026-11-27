@@ -180,7 +180,11 @@ func _run() -> void:
 		main.results.visible = false
 		main._set_ui_mode(false)
 
-	if want.call("city"):
+	var city_views: Array = []
+	for n in only:
+		if str(n).begins_with("city_"):
+			city_views.append(str(n))
+	if want.call("city") or city_views.size() > 0:
 		main.travel(true)
 		var c: CityBuilder = main.city
 		# [name, local pos, yaw deg, pitch deg]
@@ -192,13 +196,22 @@ func _run() -> void:
 			["city_east", Vector3(14, 0.05, 8.0), 25.0, 4.0],
 			["city_quay", Vector3(24, 0.05, 37.5), 165.0, 3.0],
 			["city_alley", Vector3(20, 0.05, 30.0), 0.0, 4.0],
+			["city_rain", Vector3(-30, 0.05, 8.2), -60.0, 3.0],
 		]:
+			if city_views.size() > 0 and not v[0] in city_views:
+				continue
+			if v[0] == "city_rain":
+				c.apply_weather("rain")
 			main.player.global_position = c.to_global(v[1])
 			main.player.rotation.y = deg_to_rad(v[2])
 			main.player.camera.rotation.x = deg_to_rad(v[3])
-			for i in 70:
+			for i in 40:
 				await process_frame
 			await _save(out + "/shot_%s.png" % v[0])
+		if city_views.size() > 0:
+			main.travel(false)
+			quit()
+			return
 		main.game.money = 420
 		main.open_shop("casino")
 		await main.city_ui.spin_slots(50)

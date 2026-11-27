@@ -330,6 +330,39 @@ func _run() -> void:
 		await process_frame
 	check(absf(car.position.x - car_x) > 0.01, "traffic drives")
 	check(city.pedestrians.size() >= 5, "pedestrians on the street")
+	check(city.find_children("*", "Decal", true, false).size() > 60, "streets have decals (gum, oil, cracks)")
+	city.set_wetness(1.0)
+	check(is_equal_approx(float(city._wet_mats[0].get_shader_parameter("wetness")), 1.0), "wetness drives the street shader")
+	city.set_wetness(0.65)
+	# opening hours: music store closes at midnight
+	gs.minutes = 23 * 60
+	city.update_hours(gs.minutes)
+	check(city.is_open("music", gs.minutes) and not city._shop_state["music"].shutter.visible, "music store open at 23:00")
+	gs.minutes = 24 * 60 + 30
+	city.update_hours(gs.minutes)
+	check(not city.is_open("music", gs.minutes) and city._shop_state["music"].shutter.visible, "shutter down after midnight")
+	main._on_interacted(shops["music"])
+	check(not main.city_ui.visible, "closed shop doesn't open")
+	check(city.is_open("nightshop", gs.minutes) and city.is_open("casino", 29 * 60), "night shop 24/7, casino until 06:00")
+	gs.minutes = 22 * 60
+	city.update_hours(gs.minutes)
+	# weather
+	city.apply_weather("rain")
+	check(city._rain.emitting and is_equal_approx(city.wetness, 1.0), "rain: particles + soaked streets")
+	city.apply_weather("dry")
+	check(not city._rain.emitting and city.wetness < 0.6, "dry night: damp, no rain")
+	gs.roll_weather(0.1)
+	check(gs.weather == "rain", "weather roll")
+	# traffic drives on the right, tram runs
+	var east = null
+	var tram = null
+	for c in city.cars:
+		if c.has("bell"):
+			tram = c
+		elif c.dir == 1:
+			east = c
+	check(east != null and east.lane > 0.0, "traffic drives on the right")
+	check(tram != null, "tram on the street")
 	gs.money = 500
 	main._on_interacted(shops["music"])
 	check(main.city_ui.visible and not main.player.enabled, "music store opens")

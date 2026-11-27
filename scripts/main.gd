@@ -93,6 +93,7 @@ func _ready() -> void:
 	add_child(player)
 	player.interacted.connect(_on_interacted)
 	city.player = player
+	city.game = game
 
 	_build_hud()
 
@@ -192,6 +193,8 @@ func _tick_clock(delta: float) -> void:
 	while _clock_acc >= 1.0:
 		_clock_acc -= 1.0
 		game.minutes += 1
+		if in_city:
+			city.update_hours(game.minutes)
 	clock_label.text = "DAY %d   ·   %s   ·   %s" % [game.day, game.clock_text(), "ZUIDKADE" if in_city else "KADE 17"]
 	if game.minutes >= game.dawn_minutes() and not session.is_active() and not results.visible and not city_ui.visible:
 		if in_city:
@@ -280,6 +283,8 @@ func _on_interacted(target: Object) -> void:
 			var id := str(target.get_meta("shop_id"))
 			if id == "home":
 				go_home()
+			elif not city.is_open(id, game.minutes):
+				show_toast("Closed. %s closes at %s. Come back tomorrow night." % [str(target.get_meta("label")).trim_prefix("Enter ").get_slice(" (", 0), city.closing_text(id)])
 			else:
 				open_shop(id)
 		"bed":
@@ -302,6 +307,10 @@ func _set_city_active(on: bool) -> void:
 	# indoor and outdoor each have their own light / post setup
 	room.world_env.environment = city.city_env if on else room.room_env
 	room.world_env.camera_attributes = city.cam_attr if on else null
+	if on:
+		city.apply_weather(game.weather)
+		city.update_hours(game.minutes)
+	city.set_audio_active(on)
 
 
 ## Instant move between the flat and the street (fades are done by go_outside / go_home).

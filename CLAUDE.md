@@ -9,7 +9,7 @@ Volledig design: Claude Doc "Game Design Document – Studio Producer Sim".
 - Loop: rapper boeken → opnemen in booth → beat maken/mixen in **LOOPR** (nep-DAW) → rating van rapper = sessiegeld → release = streams → upgraden.
 - Toon: realistisch beats maken en mixen, met grappige rappers en chaos-events.
 - Taal in de game: Engels, met NL-flavour.
-- Look: low-poly cartoon, neon nacht (paars/blauwe LED's).
+- Look: grounded stylized realism (simpele vormen, realistisch licht, PBR-materialen op grote vlakken, natte nacht in Rotterdam), neon als accent.
 
 ## Vaste keuzes
 - First-person nu; third-person (wisselbaar) komt later.
@@ -21,6 +21,7 @@ Volledig design: Claude Doc "Game Design Document – Studio Producer Sim".
 
 ## Art direction
 Lees **docs/ART_DIRECTION.md** (de masterprompt) vóór elke visuele taak en toets elke screenshot aan de checklist daarin.
+Lees ook **docs/REALISM_MASTERPROMPT.md** (realisme 2.0). Bij een conflict wint dat document. Bouw volgens de fases R1–R6 daarin.
 
 ## LOOPR (de DAW)
 Lees **docs/LOOPR_DAW_MASTERPROMPT.md** vóór elke taak aan LOOPR. Richting: BandLab-achtige werking (sporen, regions op een tijdlijn, editors in een dock), met eigen LOOPR-identiteit. Geen BandLab-namen, -logo of pixelkopie. Bouw volgens de fases F1–F6 daarin.

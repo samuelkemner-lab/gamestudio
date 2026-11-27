@@ -3,7 +3,7 @@ extends Node3D
 ## Title screen → bedroom studio → phone DMs → rapper session in the booth → rating & payout.
 
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
-const VERSION := "v0.12 prototype"
+const VERSION := "v0.12.1 prototype"
 const DAWN := 30 * 60  # 06:00 the next morning
 const BOOTH_LOOK := Vector3(1.45, 1.2, -1.6)
 const CITY_ORIGIN := Vector3(0, 0, 700)  # the street lives far away from the flat interior
@@ -43,6 +43,7 @@ var transit: Transit
 var _talk_mode := ""  # "" (people) | metro | tram | food | club
 var _tram_entry := {}
 var _tram_builder: CityBuilder
+var _pending_ride := {}  # chosen destination, waiting for "check in or not"
 const DISTRICT_ORIGINS := {"centraal": Vector3(0, 0, 1500), "markt": Vector3(0, 0, 2200), "haven": Vector3(0, 0, 2900)}
 const METRO_ORIGIN := Vector3(0, -80, 3600)
 var _monitor_vp: SubViewport
@@ -542,8 +543,11 @@ func _on_talk_chosen(id: String) -> void:
 
 
 func _end_talk() -> void:
+	var mode := _talk_mode
 	_talk_mode = ""
 	_set_ui_mode(false)
+	if mode == "inspect":
+		_resolve_inspection("pay")  # walking away from an inspector = you pay
 	if _talk_npc and _talk_npc != session.npc:
 		_talk_npc.pause_route(1.0)
 	_talk_npc = null
@@ -1109,7 +1113,11 @@ func _ride_menu(kind: String) -> void:
 func _on_menu_choice(mode: String, id: String) -> void:
 	match mode:
 		"metro", "tram":
-			_board(mode, id.get_slice(":", 1))
+			_checkin_menu(mode, id.get_slice(":", 1))
+		"checkin":
+			_board(_pending_ride.kind, _pending_ride.dest, id == "checkin")
+		"inspect":
+			_resolve_inspection(id)
 		"food":
 			var cost := 6 if id == "doner" else 9
 			if game.spend(cost):
@@ -1120,22 +1128,108 @@ func _on_menu_choice(mode: String, id: String) -> void:
 			_club(id)
 
 
-func _board(kind: String, dest: String) -> void:
+func _checkin_menu(kind: String, dest: String) -> void:
+	_pending_ride = {"kind": kind, "dest": dest}
+	_talk_npc = null
+	_talk_mode = "checkin"
+	talk_ui.open("Card reader", "%s → %s  ·  you have €%d" % ["Metro" if kind == "metro" else "Tram 4", Transit.station_name(dest), game.money], [
+		["Check in  (€%d)" % Transit.FARE, "checkin", game.money >= Transit.FARE],
+		["Don't check in  (free, €%d fine if they catch you)" % Transit.FINE, "dodge"]])
+	_set_ui_mode(true)
+
+
+func _board(kind: String, dest: String, checked_in := true) -> void:
 	if kind == "metro" and not (transit.state == "dwell" and transit.door_f > 0.5):
 		show_toast("Too late, the doors are closing. Wait for the next one.")
 		return
 	if kind == "tram" and float(_tram_entry.get("dwell", 0.0)) < 1.0:
 		show_toast("Too late, the tram is leaving.")
 		return
-	if not game.spend(Transit.FARE):
-		show_toast("Not enough money for a ticket (€%d)." % Transit.FARE)
-		return
-	_play_sfx(AmbienceSynth.beep())
-	if kind == "metro":
-		transit.board_metro(dest)
+	if checked_in:
+		if not game.spend(Transit.FARE):
+			show_toast("Not enough money for a ticket (€%d)." % Transit.FARE)
+			return
+		_play_sfx(AmbienceSynth.beep())
 	else:
-		transit.board_tram(_tram_entry, _tram_builder, dest)
-	show_toast("*beep* Checked in (€%d). Next stop: %s." % [Transit.FARE, Transit.station_name(dest)])
+		game.stats.dodges = int(game.stats.get("dodges", 0)) + 1
+	if kind == "metro":
+		transit.board_metro(dest, checked_in)
+	else:
+		transit.board_tram(_tram_entry, _tram_builder, dest, checked_in)
+	if checked_in:
+		show_toast("*beep* Checked in (€%d). Next stop: %s." % [Transit.FARE, Transit.station_name(dest)])
+	else:
+		show_toast("You walk right past the card reader. Next stop: %s. Fingers crossed..." % Transit.station_name(dest))
+
+
+# ---------- Ticket inspection ----------
+
+## Transit: inspectors reached your seat.
+func inspection(checked_in: bool) -> void:
+	var insp: NPC = transit._inspector
+	if checked_in:
+		_play_sfx(AmbienceSynth.beep())
+		if insp:
+			insp.say("*beep* Thank you, enjoy your ride.", 3.0)
+		show_toast("Ticket inspection. Your card beeps green. All good.")
+		if DisplayServer.get_name() == "headless" or not is_inside_tree():
+			transit.inspection_done()
+		else:
+			get_tree().create_timer(1.8).timeout.connect(func(): transit.inspection_done())
+		return
+	_talk_npc = null
+	_talk_mode = "inspect"
+	talk_ui.open("Ticket inspection", "You didn't check in. That's a €%d fine.  ·  you have €%d" % [Transit.FINE, game.money], [
+		["Pay the €%d fine" % Transit.FINE, "pay"],
+		["\"My card didn't beep, I swear...\"  (try an excuse)", "excuse"],
+		["Wait for the doors and run for it", "run"]])
+	_set_ui_mode(true)
+
+
+## Pay, talk your way out (better odds with Street Cred) or bolt at the stop.
+func _resolve_inspection(choice: String) -> void:
+	var insp: NPC = transit._inspector
+	match choice:
+		"pay":
+			_fine(Transit.FINE, 0)
+			if insp:
+				insp.say("Here's your fine. Next time: check in.", 3.0)
+			show_toast("Fined €%d for riding without checking in." % Transit.FINE)
+		"excuse":
+			var odds := minf(0.3 + game.street_cred * 0.01, 0.6)
+			if randf() < odds:
+				if insp:
+					insp.say("Hmm. Fine. Just this once. Check in next time.", 3.5)
+				show_toast("You talked your way out of it. No fine.")
+			else:
+				_fine(Transit.FINE, -1)
+				if insp:
+					insp.say("Nice try. €%d, and I'm writing down your name." % Transit.FINE, 3.5)
+				show_toast("Didn't work. Fined €%d.  −1 REP" % Transit.FINE)
+		"run":
+			if insp:
+				insp.say("Don't even think about it...", 3.0)
+			show_toast("You sit still... and wait for the doors to open.")
+			transit.inspection_done(true)
+			return
+	transit.inspection_done(false)
+
+
+## Bolting out of the doors at the stop.
+func run_from_inspector() -> bool:
+	if randf() < 0.5:
+		game.add(0, 0, 1)
+		game.stats.escapes = int(game.stats.get("escapes", 0)) + 1
+		show_toast("You bolt out the doors and lose them in the crowd.  +1 CRED")
+		return true
+	_fine(Transit.FINE + 25, -1)
+	show_toast("Caught at the doors. €%d fine and a lecture.  −1 REP" % (Transit.FINE + 25))
+	return false
+
+
+func _fine(amount: int, rep: int) -> void:
+	game.add(-amount, rep, 0)  # can push you into the red
+	game.stats.fines = int(game.stats.get("fines", 0)) + 1
 
 
 # ---------- District spots ----------

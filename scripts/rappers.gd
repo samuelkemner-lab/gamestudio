@@ -156,6 +156,15 @@ const COP := {
 }
 
 
+const INSPECTOR := {
+	"id": "inspector",
+	"name": "Controleur",
+	"model": "business_male",
+	"accessory": "inspector",
+	"voice_hz": 120.0,
+}
+
+
 static func all() -> Array:
 	return [BIG_EARL, LIL_TEAR, GHOST, SPIKE]
 

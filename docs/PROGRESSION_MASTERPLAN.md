@@ -148,7 +148,8 @@ Tempo-doel:
 | P5a | Doelen-app (altijd 3 doelen, 17 in totaal), producer-XP/level (+€25×level), release-streak (streams tot ×1,5), huur €100 per week, goud/platina/diamant-platen aan de muur | ✅ v0.11 |
 | P5b | Charts (top 20 van de stad), relaties met rappers, skillboom | ⬜ |
 | P6a | OV + nieuwe wijken: metro (4 stations), tram 4, Centraal (kiosk, busking), Marktplein (Huisraad-warenhuis, döner), Havenkwartier (club De Kraan, open mic) | ✅ v0.12 |
-| P6b | Loft, vrij plaatsen, Beatmarkt, crate digging, step-diefstal + slot, zwartrijden + controleurs, step mee in de metro | ⬜ |
+| P6b | Loft, vrij plaatsen, Beatmarkt, crate digging, step-diefstal + slot, step mee in de metro | ⬜ |
+| P6c | Zwartrijden + controleurs (boete, smoesje, wegrennen) | ✅ v0.12.1 |
 
 ## 7. Acceptatie (per fase een test in tests/run_tests.gd)
 - **P1:**

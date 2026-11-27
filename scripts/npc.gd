@@ -123,8 +123,8 @@ func _holder(bone: String) -> Node3D:
 
 
 func _add_accessory(kind: String, accent: Color) -> void:
-	# Every rapper holds a mic in the right hand
-	if kind != "cop":
+	# Every rapper holds a mic in the right hand (pedestrians, cops and inspectors don't)
+	if not kind in ["", "cop", "inspector"]:
 		var hand := _holder("Wrist.R")
 		_part(hand, _cyl(0.022, 0.13, 0.016), Vector3(0, 0.09, 0.03), _mat(Color("1a1a20"), 0.4))
 		var ball := SphereMesh.new()
@@ -153,6 +153,16 @@ func _add_accessory(kind: String, accent: Color) -> void:
 			_part(head, _cyl(0.115, 0.07, 0.11), Vector3(0, 0.2, -0.005), black)
 			_part(head, _box(Vector3(0.15, 0.012, 0.12)), Vector3(0, 0.17, 0.11), black)
 			_chain(chest, silver, 0.1)
+		"inspector":
+			# navy cap with a gold badge + card reader in the hand
+			var navy := _mat(Color("1b2540"), 0.7)
+			_part(head, _cyl(0.118, 0.07, 0.112), Vector3(0, 0.2, -0.005), navy)
+			_part(head, _box(Vector3(0.16, 0.012, 0.1)), Vector3(0, 0.168, 0.1), _mat(Color("0d0f18"), 0.4))
+			_part(head, _box(Vector3(0.04, 0.03, 0.01)), Vector3(0, 0.215, 0.114), gold)
+			_part(chest, _box(Vector3(0.07, 0.025, 0.01)), Vector3(0.07, 0.1, 0.135), gold)
+			var hand := _holder("Wrist.R")
+			_part(hand, _box(Vector3(0.07, 0.12, 0.025)), Vector3(0, 0.09, 0.04), _mat(Color("202228"), 0.5))
+			_part(hand, _box(Vector3(0.05, 0.04, 0.005)), Vector3(0, 0.11, 0.054), _glow(Color("3dff8a")))
 		"punk":
 			_chain(chest, silver, 0.1)
 			_part(chest, _box(Vector3(0.05, 0.05, 0.01)), Vector3(0.08, 0.1, 0.13), _glow(accent))
@@ -283,7 +293,7 @@ func face(point: Vector3) -> void:
 	var d := point - global_position
 	d.y = 0.0
 	if d.length() > 0.01:
-		rotation.y = atan2(d.x, d.z)
+		global_rotation.y = atan2(d.x, d.z)  # global: also right when standing in a (rotated) tram or train
 
 
 ## Bob along with the beat while rapping.

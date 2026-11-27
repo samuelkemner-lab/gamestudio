@@ -330,6 +330,36 @@ func _run() -> void:
 			tr.skip_ride()
 			main.exit_metro()
 			await settle.call(50)
+		if "t_inspect" in tviews:
+			main.travel(true)
+			main.enter_metro("zuidkade")
+			await settle.call(50)
+			tr.state = "dwell"
+			tr.t = 0.0
+			tr.door_f = 1.0
+			tr.train.position.x = 0.0
+			tr.train.visible = true
+			tr.force_inspection = 1
+			main._board("metro", "markt", false)
+			tr.ride.phase = "switching"
+			tr._metro_switch()
+			for k in 2000:
+				tr._process(0.02)
+				if main._talk_mode == "inspect":
+					break
+			for k in 120:
+				tr._cycle(0.05)
+			tr._ride_update(0.0)
+			pl.rotation.y += deg_to_rad(48.0)
+			pl.camera.rotation.x = deg_to_rad(6.0)
+			tr.set_process(false)
+			await settle.call(40)
+			await _save(out + "/shot_t_inspect.png")
+			tr.set_process(true)
+			main.talk_ui.close()
+			tr.skip_ride()
+			main.exit_metro()
+			await settle.call(50)
 		if "t_tramstop" in tviews or "t_tram_inside" in tviews:
 			main.travel(true)
 			var e: Dictionary = main.city.tram4

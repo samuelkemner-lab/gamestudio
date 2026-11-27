@@ -39,6 +39,19 @@ Vereist een videokaart met Vulkan-ondersteuning; dat heeft vrijwel elke pc van n
 5. Klik **FINISH** om de beste take uit te brengen. Je krijgt geld, reputatie en Street Cred.
 6. Pas op met het volume: de geluidsmeter loopt op. Bij 100% belt de buurman de politie (€40 boete).
 
+## In v0.12.1: zwartrijden en controleurs
+- **Kies bij elke rit bij de kaartlezer:** inchecken (€2) of niet.
+- **Controle tijdens de rit:** de kans is 30% in de metro en 22% in de tram. Een controleur (marineblauwe pet, kaartlezer in de hand) komt naar je bank en vraagt om je kaart.
+  - Ingecheckt: *piep*, groen, je rijdt door.
+  - Zwart gereden, je hebt drie keuzes:
+    - **Boete betalen:** €50. Je kunt ermee in het rood komen.
+    - **Smoesje** ("mijn kaart piepte niet..."): 30% kans dat het werkt, hoger met meer Street Cred. Werkt het niet, dan €50 en −1 REP.
+    - **Wegrennen bij de halte:** de deuren gaan open en je sprint weg. 50% kans dat je ontsnapt (+1 Street Cred), anders word je bij de deur gepakt (€75 en −1 REP).
+- **Wegklikken (ESC)** = je betaalt de boete.
+- **De trein of tram wacht met de deuren open** tot het gesprek klaar is.
+
+Rekensom: zwartrijden kost je gemiddeld meer dan inchecken. Je doet het voor de Street Cred, niet voor het geld.
+
 ## In v0.12: metro, tram en drie nieuwe wijken
 - **Metro (4 stations):** Zuidkade → Centraal → Marktplein → Havenkwartier.
   - Ga via het glazen paviljoen met de rode M naar beneden (E).

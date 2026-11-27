@@ -27,6 +27,8 @@ const V_IN := 16.0  # m/s entering the station
 const DECEL := 2.0
 const ACCEL := 2.3
 const DWELL := 16.0
+const FINE := 50
+const INSPECT_CHANCE := {"metro": 0.3, "tram": 0.22}  # chance a ride gets a ticket inspection
 
 var main: Node  # main.gd
 var station := "zuidkade"  # which station the platform is dressed as
@@ -48,6 +50,8 @@ var _chime: AudioStreamPlayer3D
 var _hum: AudioStreamPlayer
 var _arrive_from := -64.0
 var _arr_phase := "brake"
+var force_inspection := -1  # tests: 1 = always, 0 = never, -1 = random
+var _inspector: NPC
 
 
 func build_station() -> void:
@@ -328,6 +332,8 @@ func _cycle(delta: float) -> void:
 			_set_rumble(v)
 		"dwell":
 			var dwell: float = DWELL if ride.is_empty() else (3.0 if ride.get("phase", "") == "seated" else DWELL)
+			if ride.get("hold", false):
+				t = minf(t, 2.0)  # the doors stay open while the inspector is talking to you
 			door_f = move_toward(door_f, 1.0 if t < dwell - 1.6 else 0.0, delta * 1.3)
 			set_doors(train_doors, door_f, -1.0)
 			board_body.collision_layer = 1 if door_f > 0.6 and t < dwell - 1.6 else 0
@@ -376,9 +382,9 @@ func is_riding() -> bool:
 
 
 ## Sit down in the metro (doors are open) heading for `dest`.
-func board_metro(dest: String) -> void:
+func board_metro(dest: String, checked_in := true) -> void:
 	var p = main.player
-	ride = {"kind": "metro", "dest": dest, "phase": "seated", "stops": stops_between(station, dest)}
+	ride = {"kind": "metro", "dest": dest, "phase": "seated", "stops": stops_between(station, dest), "checked_in": checked_in}
 	t = minf(t, 0.5) if state == "dwell" else t
 	var seat_local := Vector3(0.95, 1.15, 3.0)  # far-side bench, looking out at the platform
 	p.enter_pose("seat", train.to_global(seat_local), _yaw_facing(train.global_basis * Vector3(-1, 0, 0)), 1.12)
@@ -388,11 +394,11 @@ func board_metro(dest: String) -> void:
 
 
 ## Sit down in a line-4 tram standing at its stop.
-func board_tram(entry: Dictionary, builder: CityBuilder, dest: String) -> void:
+func board_tram(entry: Dictionary, builder: CityBuilder, dest: String, checked_in := true) -> void:
 	var p = main.player
 	var tram: Node3D = entry.node
 	var seat_local := Vector3(0.95, 0.42, -3.2)
-	ride = {"kind": "tram", "dest": dest, "phase": "seated", "entry": entry, "builder": builder, "seat": seat_local, "start_x": tram.position.x, "t": 0.0}
+	ride = {"kind": "tram", "dest": dest, "phase": "seated", "entry": entry, "builder": builder, "seat": seat_local, "start_x": tram.position.x, "t": 0.0, "checked_in": checked_in}
 	entry.dwell = minf(float(entry.dwell), 2.4)
 	p.enter_pose("seat", tram.to_global(seat_local), _yaw_facing(tram.global_basis * Vector3(-1, 0, 0)), 1.15)
 	p.pose_lock = true
@@ -414,8 +420,11 @@ func _ride_update(delta: float) -> void:
 			if ride.phase == "seated" and state == "departing" and t > 5.6:
 				ride.phase = "switching"
 				main.fade_through(_metro_switch)
-			elif ride.phase == "arriving" and state == "dwell" and door_f > 0.85:
-				_metro_step_out()
+			elif ride.phase == "arriving":
+				ride.at = float(ride.get("at", 0.0)) + delta
+				_maybe_inspect(train, ride.seat + Vector3(-0.9, 0.0, 1.2))
+				if state == "dwell" and door_f > 0.85 and not ride.get("hold", false):
+					_metro_step_out()
 		"tram":
 			var e: Dictionary = ride.entry
 			var tram: Node3D = e.node
@@ -425,8 +434,49 @@ func _ride_update(delta: float) -> void:
 			if ride.phase == "seated" and (absf(tram.position.x - float(ride.start_x)) > 48.0 or float(ride.t) > 16.0):
 				ride.phase = "switching"
 				main.fade_through(_tram_switch)
-			elif ride.phase == "arriving" and float(e.dwell) > 0.0 and float(e.door_f) > 0.85:
-				_tram_step_out()
+			elif ride.phase == "arriving":
+				ride.at = float(ride.get("at", 0.0)) + delta
+				_maybe_inspect(tram, ride.seat + Vector3(-0.9, 0.0, 1.1))
+				if ride.get("hold", false) and float(e.dwell) > 0.0:
+					e.dwell = maxf(float(e.dwell), 3.0)  # the tram waits until you're done with the inspector
+				if float(e.dwell) > 0.0 and float(e.door_f) > 0.85 and not ride.get("hold", false):
+					_tram_step_out()
+
+
+# ================= Ticket inspection =================
+
+## Roll once per ride (at the start of the arrival leg) whether inspectors are on board.
+func _roll_inspection() -> void:
+	var chance: float = INSPECT_CHANCE.get(ride.kind, 0.25)
+	ride.inspect = force_inspection == 1 or (force_inspection == -1 and randf() < chance)
+
+
+## An inspector steps up to your seat a moment after the fade and asks for your ticket.
+func _maybe_inspect(vehicle: Node3D, spot_local: Vector3) -> void:
+	if not ride.get("inspect", false) or ride.get("inspected", false) or float(ride.get("at", 0.0)) < 1.2:
+		return
+	ride.inspected = true
+	ride.hold = true
+	_inspector = NPC.new()
+	_inspector.name = "Inspector"
+	vehicle.add_child(_inspector)
+	_inspector.setup(Rappers.INSPECTOR)
+	_inspector.position = spot_local
+	_inspector.face(main.player.global_position)
+	_inspector.say("Goedenavond. Ticket inspection. Your card, please.", 4.0)
+	main.inspection(bool(ride.checked_in))
+
+
+## main.gd calls this when the conversation is over. `run` = try to get away at the stop.
+func inspection_done(run := false) -> void:
+	ride.hold = false
+	ride.run = run
+
+
+func _remove_inspector() -> void:
+	if _inspector and is_instance_valid(_inspector):
+		_inspector.queue_free()
+	_inspector = null
 
 
 ## Under the fade: re-dress the platform as the destination and roll the train in from the tunnel.
@@ -436,6 +486,8 @@ func _metro_switch() -> void:
 	main.metro_arrive(ride.dest)
 	_start_arrival(stops)
 	ride.phase = "arriving"
+	ride.at = 0.0
+	_roll_inspection()
 	main.player.global_position = train.to_global(ride.seat)
 
 
@@ -447,7 +499,11 @@ func _metro_step_out() -> void:
 	p._pose_exit = to_global(Vector3(clampf(to_local(p.global_position).x, -14.0, 14.0), 0.05, 3.2))
 	p.leave_pose()
 	p.rotation.y = PI
+	var ran: bool = ride.get("run", false)
 	ride = {}
+	_remove_inspector()
+	if ran:
+		main.run_from_inspector()
 	ride_finished.emit(dest)
 
 
@@ -463,6 +519,8 @@ func _tram_switch() -> void:
 	ride.entry = e
 	ride.builder = b
 	ride.phase = "arriving"
+	ride.at = 0.0
+	_roll_inspection()
 	main.player.global_position = tram.to_global(ride.seat)
 
 
@@ -474,7 +532,11 @@ func _tram_step_out() -> void:
 	p._pose_exit = b.to_global(Vector3(b.tram_stop_x + 2.0, 0.05, CityBuilder.ROAD_HW + 1.2))
 	p.leave_pose()
 	p.rotation.y = PI
+	var ran: bool = ride.get("run", false)
 	ride = {}
+	_remove_inspector()
+	if ran:
+		main.run_from_inspector()
 	ride_finished.emit(dest)
 
 
@@ -485,15 +547,18 @@ func cancel_ride() -> void:
 	main.player.pose_lock = false
 	main.player.leave_pose()
 	ride = {}
+	_remove_inspector()
 
 
 ## Tests / skipping: finish the current ride instantly.
 func skip_ride() -> void:
 	if ride.is_empty():
 		return
+	ride.hold = false
 	if ride.kind == "metro":
 		if ride.phase == "seated":
 			_metro_switch()
+			ride.hold = false
 		state = "dwell"
 		t = 0.0
 		train.position.x = 0.0
@@ -502,6 +567,7 @@ func skip_ride() -> void:
 	else:
 		if ride.phase == "seated":
 			_tram_switch()
+			ride.hold = false
 		var e: Dictionary = ride.entry
 		(e.node as Node3D).position.x = ride.builder.tram_stop_x
 		e.dwell = 10.0

@@ -674,6 +674,9 @@ func _run() -> void:
 	main._ride_menu("metro")
 	check(main.talk_ui.visible and main._talk_mode == "metro", "destination menu at the doors")
 	main.talk_ui.choose("metro:haven")
+	check(main.talk_ui.visible and main._talk_mode == "checkin", "card reader: check in or not")
+	tr.force_inspection = 0
+	main.talk_ui.choose("checkin")
 	check(tr.is_riding() and pl.pose == "seat" and pl.pose_lock and gs.money == fare0 - Transit.FARE, "boarded: seated, checked in (€%d)" % Transit.FARE)
 	main._on_interacted(city.metro_entrance)
 	check(main.area == "metro", "can't wander off while riding")
@@ -723,6 +726,7 @@ func _run() -> void:
 	main._on_interacted(e.board)
 	check(main.talk_ui.visible and main._talk_mode == "tram", "tram destination menu")
 	main.talk_ui.choose("tram:markt")
+	main.talk_ui.choose("checkin")
 	check(tr.is_riding() and tr.ride.kind == "tram" and pl.pose_lock, "seated in the tram")
 	for k in 800:
 		cen._drive(0.05)
@@ -746,6 +750,67 @@ func _run() -> void:
 	main._district_shop("doner")
 	main.talk_ui.choose("doner")
 	check(int(gs.buffs.awake) >= 45, "döner keeps you up")
+	# ---------- fare dodging + ticket inspection ----------
+	var ride_metro := func(checked: bool) -> void:
+		main.enter_metro("markt")
+		tr.state = "dwell"
+		tr.t = 0.0
+		tr.door_f = 1.0
+		tr.train.position.x = 0.0
+		tr.train.visible = true
+		main._board("metro", "centraal", checked)
+		for k in 800:
+			tr._process(0.05)
+			if main._talk_mode == "inspect" or not tr.is_riding():
+				break
+	gs.money = 300
+	gs.street_cred = 0
+	tr.force_inspection = 1
+	# 1) checked in: inspector scans, you ride on
+	ride_metro.call(true)
+	for k in 400:
+		tr._process(0.05)
+		if not tr.is_riding():
+			break
+	check(not tr.is_riding() and gs.money == 298 and int(gs.stats.get("fines", 0)) == 0, "checked in: inspection passes, no fine")
+	# 2) no check-in, caught, pay
+	var m_d := gs.money
+	ride_metro.call(false)
+	check(main.talk_ui.visible and main._talk_mode == "inspect" and tr._inspector != null and tr.ride.hold, "no check-in: inspectors stop you")
+	main.talk_ui.choose("pay")
+	for k in 400:
+		tr._process(0.05)
+		if not tr.is_riding():
+			break
+	check(not tr.is_riding() and gs.money == m_d - Transit.FINE and tr._inspector == null, "paid the €%d fine, stepped out" % Transit.FINE)
+	# 3) run for it at the stop
+	var m_r := gs.money
+	var cred_r := gs.street_cred
+	ride_metro.call(false)
+	main.talk_ui.choose("run")
+	for k in 400:
+		tr._process(0.05)
+		if not tr.is_riding():
+			break
+	check(not tr.is_riding() and (gs.street_cred == cred_r + 1 or gs.money == m_r - Transit.FINE - 25), "ran for it: escaped (+CRED) or caught (€75)")
+	# 4) ESC on the inspector = you pay
+	var m_e := gs.money
+	ride_metro.call(false)
+	main.talk_ui.close()
+	check(gs.money == m_e - Transit.FINE and not tr.ride.get("hold", true), "walking away from the inspector = fine")
+	tr.skip_ride()
+	tr.force_inspection = -1
+	# 5) no inspection: free ride
+	tr.force_inspection = 0
+	var m_f := gs.money
+	ride_metro.call(false)
+	for k in 400:
+		tr._process(0.05)
+		if not tr.is_riding():
+			break
+	check(gs.money == m_f and int(gs.stats.dodges) >= 4, "not caught: free ride")
+	tr.force_inspection = -1
+	main.exit_metro()
 	# home from anywhere at dawn
 	main.travel(false)
 	check(main.area == "room" and main.room.visible and not mk.visible, "travel home from a district")

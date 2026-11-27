@@ -335,7 +335,7 @@ func update_session() -> void:
 		return
 	var r := session.rapper
 	_sess_name.text = "%s  ·  %s" % [r.name, r.style]
-	_sess_takes.text = "patience  " + "♥".repeat(session.takes_left) + "♡".repeat(int(r.patience) - session.takes_left)
+	_sess_takes.text = "patience  " + "♥".repeat(session.takes_left) + "♡".repeat(maxi(int(r.patience) - session.takes_left, 0))
 	_sess_brief.text = session.brief()
 	_sess_last.text = UIKit.stars(int(session.best.stars)) if not session.best.is_empty() else ""
 	var st := session.state

@@ -69,6 +69,9 @@ func book(r: Dictionary) -> void:
 	rapper = r
 	_gs.booked_today.append(r.id)
 	takes_left = int(r.patience)
+	if int(_gs.buffs.get("chill", 0)) > 0:
+		takes_left += 1  # a chill studio: one extra take before they lose it
+		_gs.buffs.chill = 0
 	takes_done = 0
 	best = {}
 	last = {}

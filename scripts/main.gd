@@ -3,9 +3,11 @@ extends Node3D
 ## Title screen → bedroom studio → phone DMs → rapper session in the booth → rating & payout.
 
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
-const VERSION := "v0.6 prototype"
+const VERSION := "v0.7 prototype"
 const DAWN := 30 * 60  # 06:00 the next morning
 const BOOTH_LOOK := Vector3(1.45, 1.2, -1.6)
+const CITY_ORIGIN := Vector3(0, 0, 700)  # the street lives far away from the flat interior
+const HOME_SPOT := Vector3(-1.0, 0.05, 1.85)
 
 var player  # player.gd (CharacterBody3D)
 var room: RoomBuilder
@@ -17,6 +19,11 @@ var loopr: LooprUI
 var screen_ui: LooprUI
 var phone: PhoneUI
 var results: ResultsUI
+var city: CityBuilder
+var city_ui: CityUI
+var in_city := false
+var _monitor_vp: SubViewport
+var _fade: ColorRect
 
 var hud: CanvasLayer
 var crosshair: Label
@@ -41,6 +48,14 @@ func _ready() -> void:
 	room.name = "Room"
 	add_child(room)
 	room.build()
+	room.solid(Vector3(0.95, 2.05, 0.2), Vector3(-1.2, 1.03, 2.5), "door_out", "Go outside  (Zuidkade)")
+
+	city = CityBuilder.new()
+	city.name = "City"
+	city.position = CITY_ORIGIN
+	add_child(city)
+	city.build_city()
+	_set_city_active(false)
 
 	game = GameState.new()
 	game.name = "GameState"
@@ -77,6 +92,7 @@ func _ready() -> void:
 	player.rotation.y = deg_to_rad(20)
 	add_child(player)
 	player.interacted.connect(_on_interacted)
+	city.player = player
 
 	_build_hud()
 
@@ -100,6 +116,22 @@ func _ready() -> void:
 	phone.buy_requested.connect(_on_buy)
 	phone.hints_toggled.connect(func(easy): session.easy_mode = easy; loopr.update_session())
 
+	city_ui = CityUI.new()
+	layer.add_child(city_ui)
+	city_ui.visible = false
+	city_ui.closed.connect(func(): _set_ui_mode(false))
+	city_ui.message.connect(show_toast)
+	city_ui.upgrades_changed.connect(func(): room.apply_upgrades(game.upgrades))
+
+	var fade_layer := CanvasLayer.new()
+	fade_layer.layer = 30
+	add_child(fade_layer)
+	_fade = ColorRect.new()
+	_fade.color = Color(0, 0, 0, 0)
+	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fade_layer.add_child(_fade)
+
 	results = ResultsUI.new()
 	layer.add_child(results)
 	results.visible = false
@@ -118,6 +150,7 @@ func _build_monitor_screen() -> void:
 	vp.name = "MonitorViewport"
 	vp.size = Vector2i(1600, 900)
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	_monitor_vp = vp
 	vp.gui_disable_input = true
 	add_child(vp)
 	screen_ui = LooprUI.new()
@@ -159,9 +192,13 @@ func _tick_clock(delta: float) -> void:
 	while _clock_acc >= 1.0:
 		_clock_acc -= 1.0
 		game.minutes += 1
-	clock_label.text = "DAY %d   ·   %s" % [game.day, game.clock_text()]
-	if game.minutes >= DAWN and not session.is_active() and not results.visible:
-		show_toast("06:00. You pass out on your keyboard...")
+	clock_label.text = "DAY %d   ·   %s   ·   %s" % [game.day, game.clock_text(), "ZUIDKADE" if in_city else "KADE 17"]
+	if game.minutes >= game.dawn_minutes() and not session.is_active() and not results.visible and not city_ui.visible:
+		if in_city:
+			travel(false)
+			show_toast("The sun comes up. You stumble home and crash on your bed...")
+		else:
+			show_toast("Sunrise. You pass out on your keyboard...")
 		go_to_sleep()
 
 
@@ -172,7 +209,7 @@ func _prompt_for(target: Object) -> String:
 
 
 func _ui_open() -> bool:
-	return loopr.visible or phone.visible or results.visible
+	return loopr.visible or phone.visible or results.visible or city_ui.visible
 
 
 func _input(event: InputEvent) -> void:
@@ -187,6 +224,8 @@ func _input(event: InputEvent) -> void:
 		KEY_ESCAPE:
 			if loopr.visible:
 				close_loopr()
+			elif city_ui.visible:
+				city_ui.close()
 			elif phone.visible:
 				toggle_phone()
 			elif not results.visible:
@@ -226,11 +265,78 @@ func _on_interacted(target: Object) -> void:
 				session.npc.say(session.rapper.brief_pro.trim_prefix("\"").trim_suffix("\""), 5.0)
 			elif not session.is_active():
 				show_toast("Nobody's here. Check your phone for DMs  [TAB]")
+		"door_out":
+			if session.is_active():
+				show_toast("%s is still in your studio. Finish the session first." % session.rapper.get("name", "Someone"))
+			else:
+				go_outside()
+		"shop":
+			var id := str(target.get_meta("shop_id"))
+			if id == "home":
+				go_home()
+			else:
+				open_shop(id)
 		"bed":
 			if session.is_active():
 				show_toast("You can't sleep now, %s is still here." % session.rapper.get("name", "someone"))
 			else:
 				go_to_sleep()
+
+
+# ---------- Outside world ----------
+
+func _set_city_active(on: bool) -> void:
+	in_city = on
+	city.visible = on
+	city.process_mode = Node.PROCESS_MODE_INHERIT if on else Node.PROCESS_MODE_DISABLED
+	room.visible = not on
+	room.process_mode = Node.PROCESS_MODE_DISABLED if on else Node.PROCESS_MODE_INHERIT
+	if _monitor_vp:
+		_monitor_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED if on else SubViewport.UPDATE_ALWAYS
+
+
+## Instant move between the flat and the street (fades are done by go_outside / go_home).
+func travel(to_city: bool) -> void:
+	sequencer.stop()
+	_set_city_active(to_city)
+	if to_city:
+		player.global_position = city.spawn_point()
+		player.rotation.y = PI  # face the street
+	else:
+		player.global_position = HOME_SPOT
+		player.rotation.y = 0.0
+	player.camera.rotation.x = 0.0
+	player.velocity = Vector3.ZERO
+
+
+func _fade_travel(to_city: bool, text: String) -> void:
+	if DisplayServer.get_name() == "headless" or not is_inside_tree():
+		travel(to_city)
+		show_toast(text)
+		return
+	player.enabled = false
+	var tw := create_tween()
+	tw.tween_property(_fade, "color:a", 1.0, 0.3)
+	await tw.finished
+	travel(to_city)
+	await get_tree().create_timer(0.15).timeout
+	var tw2 := create_tween()
+	tw2.tween_property(_fade, "color:a", 0.0, 0.45)
+	player.enabled = not _ui_open()
+	show_toast(text)
+
+
+func go_outside() -> void:
+	_fade_travel(true, "Zuidkade. The city never sleeps. Neither do you.")
+
+
+func go_home() -> void:
+	_fade_travel(false, "Back in the studio. Seven floors up, zero sleep.")
+
+
+func open_shop(id: String) -> void:
+	city_ui.open(id, game)
+	_set_ui_mode(true)
 
 
 func _set_ui_mode(ui: bool) -> void:
@@ -283,6 +389,9 @@ func _on_pc_crash() -> void:
 
 func _on_book(r: Dictionary) -> void:
 	if not session.can_book(r):
+		return
+	if in_city:
+		show_toast("Go home first. %s won't wait on the street." % r.name)
 		return
 	session.book(r)
 	toggle_phone()

@@ -18,6 +18,10 @@ var minutes := 22 * 60  # in-game clock, starts 22:00
 var upgrades: Array = []
 var booked_today: Array = []
 var total_streams := 0
+# City buffs: chill = next rapper +1 patience, awake = minutes you stay up past 06:00,
+# gift = neighbours got stroopwafels (noise rises slower tonight)
+var buffs := {"chill": 0, "awake": 0, "gift": false}
+var casino_net := 0
 
 
 func add(money_delta: int, rep_delta: int, cred_delta: int) -> void:
@@ -33,6 +37,45 @@ func record_track(rapper_id: String, stars: int, score: int, song: bool = false)
 	sessions += 1
 	tracks.append({"rapper": rapper_id, "stars": stars, "score": score, "day": day, "streams": 0, "song": song})
 	save()
+
+
+## Minute (from 00:00 day 1 base) at which you pass out. Snacks keep you up longer.
+func dawn_minutes() -> int:
+	return 30 * 60 + int(buffs.get("awake", 0))
+
+
+func add_buff(id: String, amount: int = 1) -> void:
+	match id:
+		"chill":
+			buffs.chill = mini(int(buffs.chill) + amount, 1)  # max one in the pocket
+		"awake":
+			buffs.awake = mini(int(buffs.awake) + amount, 120)
+		"gift":
+			buffs.gift = true
+			noise = 0.0
+	changed.emit()
+	save()
+
+
+## Pays `price` instead of the list price (cash price in the music store).
+func buy_at(upgrade: String, price: int) -> bool:
+	var it: Dictionary = Shop.item(upgrade)
+	if it.is_empty() or has(upgrade) or money < price:
+		return false
+	money -= price
+	upgrades.append(upgrade)
+	changed.emit()
+	save()
+	return true
+
+
+func spend(amount: int) -> bool:
+	if money < amount:
+		return false
+	money -= amount
+	changed.emit()
+	save()
+	return true
 
 
 func has(upgrade: String) -> bool:
@@ -85,6 +128,8 @@ func sleep() -> Dictionary:
 	minutes = 22 * 60
 	noise = 0.0
 	booked_today.clear()
+	buffs.awake = 0
+	buffs.gift = false
 	changed.emit()
 	save()
 	return {"day": day, "earned": earned, "streams": streams_night, "lines": lines, "leak": leak}
@@ -102,6 +147,8 @@ func reset() -> void:
 	upgrades = []
 	booked_today = []
 	total_streams = 0
+	buffs = {"chill": 0, "awake": 0, "gift": false}
+	casino_net = 0
 	changed.emit()
 
 
@@ -114,6 +161,7 @@ func save() -> void:
 			"money": money, "reputation": reputation, "street_cred": street_cred,
 			"sessions": sessions, "tracks": tracks, "day": day, "upgrades": upgrades,
 			"booked_today": booked_today, "total_streams": total_streams,
+			"buffs": buffs, "casino_net": casino_net,
 		}))
 
 
@@ -131,4 +179,8 @@ func load_game() -> void:
 		upgrades = d.get("upgrades", [])
 		booked_today = d.get("booked_today", [])
 		total_streams = int(d.get("total_streams", 0))
+		var b = d.get("buffs", {})
+		if b is Dictionary:
+			buffs.merge(b, true)
+		casino_net = int(d.get("casino_net", 0))
 	changed.emit()

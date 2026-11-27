@@ -1,4 +1,4 @@
-# Studio Grind (prototype v0.6)
+# Studio Grind (prototype v0.7)
 
 Een studio-producer-sim: je begint als wannabe SoundCloud-producer in je slaapkamer en bouwt beats in **LOOPR**.
 
@@ -12,7 +12,7 @@ Een studio-producer-sim: je begint als wannabe SoundCloud-producer in je slaapka
 | Toets | Actie |
 | --- | --- |
 | WASD + muis | Lopen en rondkijken |
-| E | Interactie: monitor = LOOPR, microfoon = praat met de rapper, bed = slapen (nacht afsluiten) |
+| E | Interactie: monitor = LOOPR, microfoon = praat met de rapper, bed = slapen, deur = naar buiten, winkeldeuren = naar binnen |
 | TAB | Telefoon: DM's (boeken), Shop, Tracks (streams), hints Easy/Pro |
 | Ctrl+S | Project opslaan in LOOPR (beschermt tegen een pc-crash) |
 | Ctrl+Z | Ongedaan maken in LOOPR |
@@ -29,6 +29,15 @@ Vereist een videokaart met Vulkan-ondersteuning; dat heeft vrijwel elke pc van n
 4. Klik **RECORD TAKE**. De rapper rapt twee maten en geeft een oordeel (1–5 sterren). Elke retake kost geduld.
 5. Klik **FINISH** om de beste take uit te brengen. Je krijgt geld, reputatie en Street Cred.
 6. Pas op met het volume: de geluidsmeter loopt op. Bij 100% belt de buurman de politie (€40 boete).
+
+## In v0.7: de buitenwereld (Zuidkade)
+- Loop via je voordeur naar buiten: een nachtelijke straat in een havenstad, met verkeer, voetgangers, fietsen, bushalte, een kade met de rivier, een tuibrug en een skyline
+- **Wax & Wires**: muziekwinkel, alle gear/kits/synths 15% goedkoper dan online
+- **Lucky Stack**: casino met slots en roulette (de bank wint op de lange termijn)
+- **Groene Wolk**: coffeeshop; pre-roll = volgende rapper +1 take geduld
+- **Snackbar De Hoek** en **Nachtwinkel**: kapsalon/frikandel/energy = langer wakker; stroopwafels voor de buren = noise reset
+- **Maas Sound Studios**: pro-studio (later te huren vanaf 40 REP)
+- Je kunt niet weg tijdens een sessie en niet vanaf straat boeken
 
 ## In v0.6: LOOPR 2.0
 - **Channel Rack**: slepen om te tekenen, rechtsklik wist. Tools: DRAW, VELOCITY (zachte ghost notes) en ROLL (2–4 hits per stap, voor hi-hat-rolls)

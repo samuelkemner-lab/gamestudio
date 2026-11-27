@@ -229,6 +229,13 @@ func _run() -> void:
 	check(not sess.can_book(Rappers.GHOST), "Ghost is locked without street cred")
 	sess.book(earl)
 	check(sess.state == Session.State.ARRIVING and sess.npc != null, "booking spawns the rapper")
+	var door_out: Node = null
+	for n in main.room.find_children("*", "StaticBody3D", true, false):
+		if n.get_meta("interact", "") == "door_out":
+			door_out = n
+	check(door_out != null, "flat has a front door")
+	main._on_interacted(door_out)
+	check(not main.in_city, "can't leave while a rapper is in the studio")
 	await _wait_until(func(): return sess.state == Session.State.WAITING, 15.0)
 	check(sess.state == Session.State.WAITING, "rapper walks into the booth")
 	_boom_bap(seq)
@@ -304,6 +311,79 @@ func _run() -> void:
 	check(not sess.unlocked(Rappers.SPIKE), "Spike locked at 0 rep")
 	gs.reputation = 12
 	check(sess.unlocked(Rappers.SPIKE), "Spike unlocks at 12 rep")
+
+	# --- Outside world ---
+	gs.reset()
+	var city: CityBuilder = main.city
+	var shops := {}
+	for n in city.find_children("*", "StaticBody3D", true, false):
+		if n.get_meta("interact", "") == "shop":
+			shops[n.get_meta("shop_id")] = n
+	for id in ["home", "music", "coffeeshop", "snackbar", "nightshop", "studio", "casino"]:
+		check(shops.has(id), "city has " + id)
+	main._on_interacted(door_out)
+	check(main.in_city and not main.room.visible and main.city.visible, "front door takes you outside")
+	check(main.player.global_position.distance_to(city.spawn_point()) < 0.5, "you appear in front of Kade 17")
+	var car: Node3D = city.cars[0].node
+	var car_x := car.position.x
+	for i in 20:
+		await process_frame
+	check(absf(car.position.x - car_x) > 0.01, "traffic drives")
+	check(city.pedestrians.size() >= 5, "pedestrians on the street")
+	gs.money = 500
+	main._on_interacted(shops["music"])
+	check(main.city_ui.visible and not main.player.enabled, "music store opens")
+	check(CityUI.store_price("mic_pro") < int(Shop.item("mic_pro").price), "cash price beats the online shop")
+	check(gs.buy_at("mic_pro", CityUI.store_price("mic_pro")) and gs.money == 500 - CityUI.store_price("mic_pro"), "buy gear in the store")
+	main.city_ui.close()
+	for id in ["coffeeshop", "snackbar", "nightshop", "studio", "casino"]:
+		main.open_shop(id)
+		check(main.city_ui.visible, "%s counter opens" % id)
+		main.city_ui.close()
+	# buffs
+	gs.add_buff("awake", 60)
+	check(gs.dawn_minutes() == 30 * 60 + 60, "kapsalon keeps you up an hour")
+	gs.add_buff("chill")
+	gs.add_buff("chill")
+	check(int(gs.buffs.chill) == 1, "one pre-roll in the pocket at a time")
+	gs.noise = 50.0
+	gs.add_buff("gift")
+	check(gs.noise == 0.0 and gs.buffs.gift, "stroopwafels calm the neighbours")
+	# casino maths (house edge)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var bet_total := 0
+	var win_total := 0
+	for i in 20000:
+		var r := Casino.spin_slots(rng, 10)
+		bet_total += 10
+		win_total += int(r.win)
+	var rtp := float(win_total) / bet_total
+	check(rtp > 0.8 and rtp < 0.95, "slots return %.1f%% (house edge)" % (rtp * 100.0))
+	win_total = 0
+	for i in 20000:
+		win_total += int(Casino.spin_roulette(rng, 10, "red").win)
+	rtp = float(win_total) / bet_total
+	check(rtp > 0.92 and rtp < 1.0, "roulette on red returns %.1f%%" % (rtp * 100.0))
+	main.open_shop("casino")
+	gs.money = 100
+	var spin: Dictionary = await main.city_ui.spin_slots(10)
+	check(gs.money == 90 + int(spin.win), "slot spin pays out correctly")
+	gs.money = 5
+	var broke: Dictionary = await main.city_ui.spin_slots(10)
+	check(broke.is_empty() and gs.money == 5, "can't bet money you don't have")
+	main.city_ui.close()
+	# booking from the street is blocked, home door brings you back
+	main._on_book(Rappers.BIG_EARL)
+	check(not sess.is_active(), "can't book a session while outside")
+	main._on_interacted(shops["home"])
+	check(not main.in_city and main.room.visible, "Kade 17 door takes you home")
+	# pre-roll: next rapper gets an extra take
+	gs.reset()
+	gs.add_buff("chill")
+	sess.book(Rappers.LIL_TEAR)
+	check(sess.takes_left == int(Rappers.LIL_TEAR.patience) + 1 and int(gs.buffs.chill) == 0, "chill studio = one extra take")
+	sess._leave()
 
 	print("RESULT: ", "PASS" if failures == 0 else "FAIL (%d)" % failures)
 	quit(failures)

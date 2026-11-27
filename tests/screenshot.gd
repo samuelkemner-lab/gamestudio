@@ -180,6 +180,38 @@ func _run() -> void:
 		main.results.visible = false
 		main._set_ui_mode(false)
 
+	if want.call("city"):
+		main.travel(true)
+		var c: CityBuilder = main.city
+		# [name, local pos, yaw deg, pitch deg]
+		for v in [
+			["city_home", Vector3(-42, 0.05, -6.5), 180.0, -2.0],
+			["city_street", Vector3(-66, 0.05, 1.5), -80.0, 2.0],
+			["city_shops", Vector3(-22, 0.05, 1.0), 0.0, 8.0],
+			["city_casino", Vector3(-50, 0.05, -7.5), 180.0, 9.0],
+			["city_east", Vector3(14, 0.05, 8.0), 25.0, 4.0],
+			["city_quay", Vector3(24, 0.05, 37.5), 165.0, 3.0],
+			["city_alley", Vector3(20, 0.05, 30.0), 0.0, 4.0],
+		]:
+			main.player.global_position = c.to_global(v[1])
+			main.player.rotation.y = deg_to_rad(v[2])
+			main.player.camera.rotation.x = deg_to_rad(v[3])
+			for i in 10:
+				await physics_frame
+			await _save(out + "/shot_%s.png" % v[0])
+		main.game.money = 420
+		main.open_shop("casino")
+		await main.city_ui.spin_slots(50)
+		await _save(out + "/shot_city_casino_ui.png")
+		main.city_ui.close()
+		main.open_shop("music")
+		await _save(out + "/shot_city_music_ui.png")
+		main.city_ui.close()
+		main.open_shop("snackbar")
+		await _save(out + "/shot_city_snack_ui.png")
+		main.city_ui.close()
+		main.travel(false)
+
 	if want.call("daw"):
 		var sq: Sequencer = main.sequencer
 		sq.stop()

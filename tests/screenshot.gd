@@ -196,8 +196,8 @@ func _run() -> void:
 			main.player.global_position = c.to_global(v[1])
 			main.player.rotation.y = deg_to_rad(v[2])
 			main.player.camera.rotation.x = deg_to_rad(v[3])
-			for i in 10:
-				await physics_frame
+			for i in 70:
+				await process_frame
 			await _save(out + "/shot_%s.png" % v[0])
 		main.game.money = 420
 		main.open_shop("casino")

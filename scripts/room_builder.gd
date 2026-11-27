@@ -36,6 +36,8 @@ const PAL := {
 }
 
 var screen_material: StandardMaterial3D
+var room_env: Environment
+var world_env: WorldEnvironment
 var fan: Node3D
 var upgrade_nodes := {}
 var _noise_cache := {}
@@ -300,6 +302,8 @@ func _environment() -> void:
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
+	room_env = env
+	world_env = we
 
 
 # ================= Room shell =================

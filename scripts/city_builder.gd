@@ -30,6 +30,9 @@ const SHOPS := [
 ]
 
 var spawn_local := Vector3(-42.0, 0.05, -8.4)
+var city_env: Environment
+var cam_attr: CameraAttributesPractical
+var quality_high := true
 var player: Node3D  # set by main, cars brake for it
 var cars: Array = []  # [{node, dir, lane, speed, brake}]
 var pedestrians: Array[NPC] = []
@@ -42,6 +45,7 @@ var _brake_mats := {}
 func build_city() -> void:
 	_rng.seed = 2026
 	_base_remap = {"_defaultMat": mat(Color("2a2633"), 0.6, "")}
+	_outdoor_environment()
 	_bmat = ShaderMaterial.new()
 	_bmat.shader = load("res://assets/shaders/night_building.gdshader")
 	_bmat.set_shader_parameter("colormap", load("res://assets/models/kenney_city/Textures/colormap.png"))
@@ -61,6 +65,109 @@ func build_city() -> void:
 	_pedestrians()
 	_bounds_walls()
 	_moon()
+
+
+# ================= Outdoor light & post (REALISM R1) =================
+
+## Night in a harbour city: AgX tonemapping, sky glowing orange from light pollution,
+## SDFGI bounce light, SSR on wet ground, thin volumetric fog, cool-shadow / warm-highlight grade.
+func _outdoor_environment() -> void:
+	var e := Environment.new()
+	var sky_mat := ProceduralSkyMaterial.new()
+	sky_mat.sky_top_color = Color("04050c")
+	sky_mat.sky_horizon_color = Color("3b2a33")  # sodium light pollution
+	sky_mat.ground_horizon_color = Color("2a2028")
+	sky_mat.ground_bottom_color = Color("07060a")
+	sky_mat.sky_curve = 0.09
+	sky_mat.sky_energy_multiplier = 0.9
+	sky_mat.sun_angle_max = 0.0
+	var sky := Sky.new()
+	sky.sky_material = sky_mat
+	e.background_mode = Environment.BG_SKY
+	e.sky = sky
+	e.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	e.ambient_light_energy = 0.55
+	e.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+	e.tonemap_mode = 4 if Engine.get_version_info().minor >= 4 else Environment.TONE_MAPPER_ACES  # AgX
+	e.tonemap_exposure = 1.25
+	e.ssao_enabled = true
+	e.ssao_radius = 1.4
+	e.ssao_intensity = 1.6
+	e.ssr_enabled = true
+	e.ssr_max_steps = 56
+	e.ssr_fade_in = 0.1
+	e.ssr_fade_out = 2.0
+	e.ssr_depth_tolerance = 0.3
+	e.sdfgi_enabled = true
+	e.sdfgi_cascades = 4
+	e.sdfgi_min_cell_size = 0.4
+	e.sdfgi_use_occlusion = true
+	e.sdfgi_read_sky_light = true
+	e.sdfgi_bounce_feedback = 0.4
+	e.sdfgi_energy = 1.2
+	e.glow_enabled = true
+	e.glow_intensity = 0.45
+	e.glow_bloom = 0.03
+	e.glow_hdr_threshold = 1.3
+	e.volumetric_fog_enabled = true
+	e.volumetric_fog_density = 0.007
+	e.volumetric_fog_albedo = Color(0.78, 0.74, 0.86)
+	e.volumetric_fog_length = 64.0
+	e.volumetric_fog_gi_inject = 0.4
+	e.adjustment_enabled = true
+	e.adjustment_contrast = 1.06
+	e.adjustment_saturation = 0.9
+	# 1D LUT: shadows lean cool blue, highlights lean warm
+	var g := Gradient.new()
+	g.set_color(0, Color(0.0, 0.0, 0.0))
+	g.set_color(1, Color(1.0, 0.97, 0.9))
+	g.add_point(0.18, Color(0.15, 0.17, 0.23))
+	g.add_point(0.5, Color(0.5, 0.5, 0.5))
+	var lut := GradientTexture1D.new()
+	lut.gradient = g
+	lut.width = 256
+	e.adjustment_color_correction = lut
+	city_env = e
+	cam_attr = CameraAttributesPractical.new()
+	cam_attr.auto_exposure_enabled = true
+	cam_attr.auto_exposure_scale = 0.55
+	cam_attr.auto_exposure_min_sensitivity = 80.0
+	cam_attr.auto_exposure_max_sensitivity = 900.0
+	cam_attr.auto_exposure_speed = 1.2
+
+
+## F9 in game: Low drops the expensive features (for weaker GPUs).
+func apply_quality(high: bool) -> void:
+	quality_high = high
+	city_env.sdfgi_enabled = high
+	city_env.ssr_enabled = high
+	city_env.volumetric_fog_enabled = high
+	city_env.ssao_enabled = high
+	if not high:
+		city_env.ambient_light_energy = 0.8
+	else:
+		city_env.ambient_light_energy = 0.55
+
+
+## Window-shaped light projected onto the sidewalk (a light texture / projector).
+static var _window_projector: ImageTexture
+static func window_projector() -> ImageTexture:
+	if _window_projector:
+		return _window_projector
+	var img := Image.create(128, 128, false, Image.FORMAT_RGBA8)
+	for y in 128:
+		for x in 128:
+			var pane := 1.0
+			var fx := fmod(x / 128.0 * 3.0, 1.0)
+			if fx < 0.07 or fx > 0.93:
+				pane = 0.08  # mullions
+			if y < 10 or y > 118 or x < 6 or x > 122:
+				pane = 0.0
+			var soft := clampf(1.0 - Vector2(x - 64, y - 64).length() / 96.0, 0.0, 1.0)
+			var v := pane * (0.55 + 0.45 * soft)
+			img.set_pixel(x, y, Color(v, v, v, 1.0))
+	_window_projector = ImageTexture.create_from_image(img)
+	return _window_projector
 
 
 func spawn_point() -> Vector3:
@@ -239,10 +346,22 @@ func _storefront(s: Dictionary) -> void:
 	var l := OmniLight3D.new()
 	l.position = g.transform * Vector3(0, 3.0, 2.4)
 	l.light_color = col.lerp(Color.WHITE, 0.3)
-	l.light_energy = 2.4 if not is_home else 1.6
-	l.omni_range = 8.5
+	l.light_energy = 1.3 if not is_home else 1.0
+	l.omni_range = 7.5
 	l.light_volumetric_fog_energy = 0.6
 	add_child(l)
+	if not is_home:
+		# warm white shop light falling out of the window onto the wet sidewalk
+		var sp := SpotLight3D.new()
+		g.add_child(sp)
+		sp.position = Vector3(-w * 0.19, 2.9, -0.4)
+		sp.rotation_degrees = Vector3(-52, 180, 0)
+		sp.light_color = Color(s.glass).lerp(Color("fff1dc"), 0.55)
+		sp.light_energy = 5.0
+		sp.spot_range = 9.0
+		sp.spot_angle = 48.0
+		sp.light_projector = window_projector()
+		sp.light_volumetric_fog_energy = 0.3
 
 
 ## Things visible behind each shop window.
@@ -487,14 +606,16 @@ func _street_lights() -> void:
 			var z: float = side * (ROAD_HW + 0.7)
 			kit(g, "light-curved", Vector3(xx, 0, z), 0.0 if side == 1 else 180.0, 9.0, {}, ROADS)
 			var head := Vector3(xx, 5.4, z - side * 1.5)
-			part(g, box(Vector3(0.5, 0.08, 0.8)), head + Vector3(0, -0.12, 0), glow(Color("ffb35c"), 6.0))
+			var led := i % 3 == 2  # the city is halfway through swapping sodium for LED
+			var lamp_col := Color("dfe8ff") if led else Color("ffa04a")
+			part(g, box(Vector3(0.5, 0.08, 0.8)), head + Vector3(0, -0.12, 0), glow(Color("eef3ff") if led else Color("ffb35c"), 6.0))
 			var l := OmniLight3D.new()
 			l.position = head + Vector3(0, -0.4, 0)
-			l.light_color = Color("ffa04a")
-			l.light_energy = 1.9
+			l.light_color = lamp_col
+			l.light_energy = 1.5 if led else 1.9
 			l.omni_range = 12.0
-			l.omni_attenuation = 1.3
-			l.shadow_enabled = i % 4 == 0
+			l.omni_attenuation = 1.4
+			l.shadow_enabled = i % 3 == 0
 			l.light_volumetric_fog_energy = 1.4
 			g.add_child(l)
 			i += 1
@@ -513,7 +634,7 @@ func _street_lights() -> void:
 func _moon() -> void:
 	var moon := DirectionalLight3D.new()
 	moon.light_color = Color("8fa4ff")
-	moon.light_energy = 0.9
+	moon.light_energy = 0.55
 	moon.shadow_enabled = true
 	moon.directional_shadow_max_distance = 60.0
 	moon.light_volumetric_fog_energy = 0.4
@@ -587,18 +708,36 @@ func _bike(parent: Node3D, pos: Vector3, rot_y: float, color: Color) -> void:
 
 # ================= Cars =================
 
-func _car(model: String, pos: Vector3, rot_y: float) -> Node3D:
+func _car(model: String, pos: Vector3, rot_y: float, driving := false) -> Node3D:
 	var c := kit(self, model, pos, rot_y, CAR_SCALE, {}, CARS)
 	# head + tail lights
 	var sz: Vector3 = c.get_meta("size")
 	var lights := Node3D.new()
 	c.add_child(lights)
 	lights.scale = Vector3.ONE / CAR_SCALE
-	var brake := glow(Color("ff2020"), 0.8)
+	var brake := glow(Color("ff2020"), 0.8 if driving else 0.0)
+	var head := glow(Color("fff2d0"), 3.0) if driving else mat(Color("cfd2dc"), 0.2, "")
 	for sx in [-0.55, 0.55]:
 		part(lights, box(Vector3(0.3, 0.12, 0.05)), Vector3(sx * sz.x / 1.6, sz.y * 0.32, -sz.z / 2.0 - 0.02), brake)
-		part(lights, box(Vector3(0.3, 0.12, 0.05)), Vector3(sx * sz.x / 1.6, sz.y * 0.3, sz.z / 2.0 + 0.02), glow(Color("fff2d0"), 3.0))
+		part(lights, box(Vector3(0.3, 0.12, 0.05)), Vector3(sx * sz.x / 1.6, sz.y * 0.3, sz.z / 2.0 + 0.02), head)
 	c.set_meta("brake", brake)
+	if driving:
+		var hl := SpotLight3D.new()
+		lights.add_child(hl)
+		hl.position = Vector3(0, sz.y * 0.3, sz.z / 2.0 + 0.2)
+		hl.rotation_degrees = Vector3(-7, 180, 0)
+		hl.light_color = Color("fff0d6")
+		hl.light_energy = 5.0
+		hl.spot_range = 20.0
+		hl.spot_angle = 28.0
+		hl.light_volumetric_fog_energy = 1.0
+		var tl := OmniLight3D.new()
+		lights.add_child(tl)
+		tl.position = Vector3(0, sz.y * 0.3, -sz.z / 2.0 - 0.4)
+		tl.light_color = Color("ff2a1a")
+		tl.light_energy = 0.6
+		tl.omni_range = 3.5
+		c.set_meta("tail", tl)
 	return c
 
 
@@ -624,7 +763,7 @@ func _traffic() -> void:
 		var dir := 1 if i % 2 == 0 else -1
 		var lane := -1.7 if dir == 1 else 1.7
 		var x := _rng.randf_range(-140, 140)
-		var c := _car(models[i % models.size()], Vector3(x, 0, lane), 90.0 if dir == 1 else -90.0)
+		var c := _car(models[i % models.size()], Vector3(x, 0, lane), 90.0 if dir == 1 else -90.0, true)
 		cars.append({"node": c, "dir": dir, "lane": lane, "speed": _rng.randf_range(8.0, 11.0), "cur": 9.0})
 
 
@@ -644,7 +783,10 @@ func _drive(delta: float) -> void:
 		c.cur = move_toward(c.cur, target, (18.0 if blocked else 5.0) * delta)
 		n.position.x += c.dir * c.cur * delta
 		var bm: StandardMaterial3D = n.get_meta("brake")
-		bm.emission_energy_multiplier = 4.0 if c.cur < c.speed * 0.6 else 0.8
+		var braking: bool = c.cur < c.speed * 0.6
+		bm.emission_energy_multiplier = 4.0 if braking else 0.8
+		var tl: OmniLight3D = n.get_meta("tail")
+		tl.light_energy = 2.2 if braking else 0.6
 		if n.position.x * c.dir > 150.0:
 			n.position.x = -150.0 * c.dir
 

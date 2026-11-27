@@ -250,6 +250,12 @@ func _input(event: InputEvent) -> void:
 			if loopr.visible and not event.ctrl_pressed:
 				sequencer.select_pattern(event.physical_keycode - KEY_1)
 				get_viewport().set_input_as_handled()
+		KEY_F9:
+			city.apply_quality(not city.quality_high)
+			room.room_env.ssil_enabled = city.quality_high
+			room.room_env.volumetric_fog_enabled = city.quality_high
+			show_toast("Graphics: %s" % ("HIGH" if city.quality_high else "LOW (faster)"))
+			get_viewport().set_input_as_handled()
 		KEY_TAB:
 			if not loopr.visible and not results.visible:
 				toggle_phone()
@@ -293,6 +299,9 @@ func _set_city_active(on: bool) -> void:
 	room.process_mode = Node.PROCESS_MODE_DISABLED if on else Node.PROCESS_MODE_INHERIT
 	if _monitor_vp:
 		_monitor_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED if on else SubViewport.UPDATE_ALWAYS
+	# indoor and outdoor each have their own light / post setup
+	room.world_env.environment = city.city_env if on else room.room_env
+	room.world_env.camera_attributes = city.cam_attr if on else null
 
 
 ## Instant move between the flat and the street (fades are done by go_outside / go_home).

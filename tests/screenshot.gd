@@ -293,6 +293,7 @@ func _run() -> void:
 		if "t_platform" in tviews or "t_depart" in tviews or "t_tunnel" in tviews:
 			main.travel(true)
 			main.enter_metro("zuidkade")
+			await settle.call(50)
 			tr.next_in = 0.0
 			for k in 600:
 				tr._cycle(0.05)
@@ -328,6 +329,7 @@ func _run() -> void:
 			tr.set_process(true)
 			tr.skip_ride()
 			main.exit_metro()
+			await settle.call(50)
 		if "t_tramstop" in tviews or "t_tram_inside" in tviews:
 			main.travel(true)
 			var e: Dictionary = main.city.tram4

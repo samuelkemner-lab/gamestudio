@@ -81,7 +81,7 @@ Er ligt altijd iets binnen bereik: een upgrade waar je nog €40 voor mist, een 
 - Slapen: streams + uitbetaling (het "slotmachinemoment" van de dag, met animatie van de getallen).
 
 **Week (P5):**
-- Huur €150 per 7 nachten vanaf week 2. Niet betaald = schuld en Buurman Henk wordt vervelend.
+- Huur €100 per 7 nachten vanaf week 2. Niet betaald = schuld en Buurman Henk wordt vervelend.
 - Wekelijkse charts (top 20 van de stad met NPC-producers). Klimmen = REP-bonus.
 - Wekelijks doel van een rapper ("ik wil een EP van 3 tracks").
 
@@ -130,7 +130,7 @@ Er ligt altijd iets binnen bereik: een upgrade waar je nog €40 voor mist, een 
 | Motor tune | €90 |
 | Grote accu | €70 |
 | Meubels | €25–260 |
-| Huur (P5) | €150 per week |
+| Huur (P5) | €100 per week (vanaf nacht 8) |
 
 Tempo-doel:
 - Eerste step in nacht 2–3.
@@ -145,7 +145,8 @@ Tempo-doel:
 | P2 | E-step: kopen (Ruilmarkt), rijden, parkeren, batterij, opladen, zoemgeluid, koplamp, vallen, upgrades | ✅ v0.10 |
 | P3 | Huisraad: meubels kopen/plaatsen in slots, VIBE/AKOESTIEK/COMFORT met echte effecten, dozen verdwijnen | ✅ v0.10 |
 | P4 | Zoef-bezorgen: ophalen bij de snackbar, afleveren bij een deur, timer, loon, fooi | ✅ v0.10 |
-| P5 | Huur, charts, doelen-app, streak, relaties met rappers, producer-level, plaques | ⬜ |
+| P5a | Doelen-app (altijd 3 doelen, 17 in totaal), producer-XP/level (+€25×level), release-streak (streams tot ×1,5), huur €100 per week, goud/platina/diamant-platen aan de muur | ✅ v0.11 |
+| P5b | Charts (top 20 van de stad), relaties met rappers, skillboom | ⬜ |
 | P6 | Nieuwe wijk + club (open mic/DJ), loft, vrij plaatsen, Beatmarkt, crate digging, step-diefstal + slot | ⬜ |
 
 ## 7. Acceptatie (per fase een test in tests/run_tests.gd)

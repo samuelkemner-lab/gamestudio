@@ -36,6 +36,10 @@ func show_night(n: Dictionary) -> void:
 		if l.leaked:
 			col.add_child(UIKit.label("   LEAKED! Everyone's listening, nobody's paying.", 14, UIKit.POP))
 	col.add_child(UIKit.label("+%d streams  ·  +€%d" % [n.streams, n.earned], 26, UIKit.GOLD))
+	if int(n.get("streak", 0)) >= 2:
+		col.add_child(UIKit.label("Release streak: %d nights  ·  streams ×%.1f" % [int(n.streak), float(n.get("mult", 1.0))], 16, UIKit.CYAN))
+	if int(n.get("rent", 0)) > 0:
+		col.add_child(UIKit.label("Rent  −€%d" % int(n.rent), 18, UIKit.POP))
 	var btn := UIKit.button("NEXT NIGHT", UIKit.ACCENT, 18)
 	btn.pressed.connect(func():
 		visible = false

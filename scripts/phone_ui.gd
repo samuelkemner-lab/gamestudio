@@ -19,6 +19,7 @@ const APPS := [
 	{"id": "huisraad", "name": "Huisraad", "color": Color("e0a43a"), "glyph": "sofa"},
 	{"id": "ruilmarkt", "name": "Ruilmarkt", "color": Color("2a8bd8"), "glyph": "tag"},
 	{"id": "zoef", "name": "Zoef", "color": Color("ff3d7f"), "glyph": "bag"},
+	{"id": "goals", "name": "Goals", "color": Color("f2c14e"), "glyph": "trophy"},
 	{"id": "settings", "name": "Settings", "color": Color("6b6880"), "glyph": "sliders"},
 ]
 
@@ -131,6 +132,8 @@ func _render() -> void:
 			_ruilmarkt()
 		"zoef":
 			_zoef()
+		"goals":
+			_goals()
 		"settings":
 			_settings()
 
@@ -194,7 +197,7 @@ func _home() -> void:
 	var date := UIKit.label("Night %d  ·  Rotterdam-Zuid  ·  %s, 7°" % [_gs.day, wx], 14, UIKit.DIM)
 	date.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_screen.add_child(date)
-	var st := UIKit.label(_stats_line(), 14, UIKit.GOLD)
+	var st := UIKit.label(_stats_line() + "  ·  LVL %d%s" % [_gs.level(), "  ·  streak %d" % _gs.streak if _gs.streak >= 2 else ""], 14, UIKit.GOLD)
 	st.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_screen.add_child(st)
 	if not _gs.pending.is_empty():
@@ -514,6 +517,48 @@ func _zoef() -> void:
 	_screen.add_child(card)
 
 
+# ---------- Goals ----------
+
+func _goals() -> void:
+	var lv := _gs.level()
+	_header("Goals", "Producer level %d  ·  %d XP" % [lv, _gs.xp])
+	var bar := ProgressBar.new()
+	bar.min_value = _gs.level_xp(lv)
+	bar.max_value = _gs.level_xp(lv + 1)
+	bar.value = _gs.xp
+	bar.show_percentage = false
+	bar.custom_minimum_size = Vector2(0, 10)
+	bar.add_theme_stylebox_override("background", UIKit.box(Color(1, 1, 1, 0.08), 5, Color(), 0, 0))
+	bar.add_theme_stylebox_override("fill", UIKit.box(UIKit.GOLD, 5, Color(), 0, 0))
+	_screen.add_child(bar)
+	var next_rent := 7 - ((_gs.day - 1) % 7)
+	_screen.add_child(UIKit.label("Release streak: %d night%s (streams ×%.1f)  ·  rent €%d in %d night%s" % [
+		_gs.streak, "" if _gs.streak == 1 else "s", _gs.streak_mult(), GameState.RENT, next_rent, "" if next_rent == 1 else "s"], 12, UIKit.CYAN))
+	for g in Goals.active(_gs):
+		var card := _card()
+		var v := VBoxContainer.new()
+		card.add_child(v)
+		v.add_child(UIKit.wrap_label(str(g.text), 15, UIKit.TEXT, 330))
+		var cur := mini(Goals.progress(g.id, _gs), int(g.target))
+		var pb := ProgressBar.new()
+		pb.max_value = int(g.target)
+		pb.value = cur
+		pb.show_percentage = false
+		pb.custom_minimum_size = Vector2(0, 8)
+		pb.add_theme_stylebox_override("background", UIKit.box(Color(1, 1, 1, 0.08), 4, Color(), 0, 0))
+		pb.add_theme_stylebox_override("fill", UIKit.box(UIKit.CYAN, 4, Color(), 0, 0))
+		v.add_child(pb)
+		var reward := "€%d" % int(g.money)
+		if int(g.rep) > 0:
+			reward += "  ·  +%d REP" % int(g.rep)
+		v.add_child(UIKit.label("%d / %d    reward: %s  ·  +%d XP" % [cur, int(g.target), reward, int(g.xp)], 12, UIKit.GOLD))
+		_screen.add_child(card)
+	_screen.add_child(UIKit.label("Completed: %d / %d" % [_gs.goals_done.size(), Goals.LIST.size()], 12, UIKit.DIM))
+	var pl := _gs.plaques()
+	if not pl.is_empty():
+		_screen.add_child(UIKit.label("On your wall: " + ", ".join(pl.map(func(x): return str(x).capitalize() + " plaque")), 12, UIKit.GOLD))
+
+
 # ---------- Settings ----------
 
 func _settings() -> void:
@@ -576,6 +621,13 @@ class AppIcon extends Control:
 				draw_rect(Rect2(c + Vector2(-16, -8), Vector2(32, 26)), w)
 				draw_arc(c + Vector2(0, -8), 9, PI, TAU, 12, w, 4.0)
 				draw_line(c + Vector2(-8, 4), c + Vector2(8, 4), color, 3.0)
+			"trophy":
+				draw_rect(Rect2(c + Vector2(-12, -18), Vector2(24, 14)), w)
+				draw_circle(c + Vector2(0, -4), 12, w)
+				draw_rect(Rect2(c + Vector2(-3, 6), Vector2(6, 8)), w)
+				draw_rect(Rect2(c + Vector2(-11, 14), Vector2(22, 5)), w)
+				draw_arc(c + Vector2(-13, -10), 6, PI * 0.5, PI * 1.5, 10, w, 3.0)
+				draw_arc(c + Vector2(13, -10), 6, -PI * 0.5, PI * 0.5, 10, w, 3.0)
 			"sliders":
 				for i in 3:
 					var y := -12 + i * 12

@@ -39,6 +39,13 @@ Vereist een videokaart met Vulkan-ondersteuning; dat heeft vrijwel elke pc van n
 5. Klik **FINISH** om de beste take uit te brengen. Je krijgt geld, reputatie en Street Cred.
 6. Pas op met het volume: de geluidsmeter loopt op. Bij 100% belt de buurman de politie (€40 boete).
 
+## In v0.11: doelen, levels, streak en huur
+- **Goals-app:** altijd 3 actieve doelen (17 in totaal, van "eerste track" tot "100.000 streams") met geld, REP en XP als beloning. Een melding verschijnt zodra je er een haalt.
+- **Producer-level:** XP voor sessies, ritten en doelen. Elk level geeft een bonus (€25 × level).
+- **Release-streak:** elke nacht een track = streams +10% per nacht (tot ×1,5). Eén gemiste nacht wordt vergeven.
+- **Huur:** €100 per week. Zonder geld sta je rood en kun je niets kopen.
+- **Platen aan de muur:** goud bij 25k streams, platina bij 100k, diamant bij 500k (boven je bed).
+
 ## In v0.10: telefoon, e-step, inrichten en bijbaantje
 Masterplan: docs/PROGRESSION_MASTERPLAN.md (P1–P4 gebouwd, P5–P6 gepland).
 - **GRIND OS:** homescreen met app-iconen en badges.

@@ -243,8 +243,12 @@ func _run() -> void:
 	await _wait_until(func(): return sess.state == Session.State.REVIEW, 15.0)
 	check(sess.state == Session.State.REVIEW and int(sess.best.stars) >= 4, "take judged: %s" % str(sess.best.get("stars")))
 	var money_before := gs.money
+	var lv_before := gs.level()
 	var summary := sess.finish()
-	check(summary.money > 0 and gs.money == money_before + int(summary.money), "payout lands in wallet (+€%d)" % summary.money)
+	var lv_bonus := 0
+	for l in range(lv_before + 1, gs.level() + 1):
+		lv_bonus += 25 * l
+	check(summary.money > 0 and gs.money == money_before + int(summary.money) + lv_bonus, "payout lands in wallet (+€%d)" % summary.money)
 	check(gs.sessions == 1, "track recorded")
 	await _wait_until(func(): return sess.state == Session.State.IDLE, 15.0)
 	check(sess.state == Session.State.IDLE, "rapper leaves, studio free again")
@@ -616,6 +620,34 @@ func _run() -> void:
 	var late: Dictionary = main.complete_delivery()
 	check(late.late, "late delivery: half pay")
 	main.travel(false)
+	# ---------- P5: goals, XP, streak, rent, plaques ----------
+	gs.reset()
+	check(Goals.active(gs).size() == 3, "always three active goals")
+	gs.deliveries = 1
+	var done: Array = gs.check_goals()
+	check(done.size() == 1 and done[0].id == "first_delivery" and gs.money > 50 and gs.xp > 0, "goal completes and pays out")
+	check(Goals.active(gs).size() == 3 and not Goals.active(gs).any(func(g): return g.id == "first_delivery"), "next goal slides in")
+	var lv0 := gs.level()
+	gs.add_xp(500)
+	check(gs.level() > lv0, "XP levels you up (level %d)" % gs.level())
+	gs.record_track("lil_tear", 4, 80)
+	gs.sleep()
+	main.results.visible = false
+	gs.record_track("lil_tear", 4, 80)
+	check(gs.streak == 2 and gs.streak_mult() > 1.0, "release streak builds up (×%.1f)" % gs.streak_mult())
+	gs.sleep()
+	gs.sleep()
+	gs.sleep()
+	check(gs.streak == 0, "two nights without a release ends the streak")
+	gs.day = 7
+	var m0 := gs.money
+	var rent_night: Dictionary = gs.sleep()
+	check(int(rent_night.rent) == GameState.RENT and gs.money <= m0 - GameState.RENT + int(rent_night.earned), "rent is due every 7 nights")
+	gs.total_streams = 30000
+	main.room.apply_plaques(gs.plaques())
+	check(gs.plaques() == ["gold"] and main.room.plaque_root.get_child_count() == 1, "gold plaque on the wall at 25k streams")
+	main.results.visible = false
+	main._set_ui_mode(false)
 
 	print("RESULT: ", "PASS" if failures == 0 else "FAIL (%d)" % failures)
 	quit(failures)

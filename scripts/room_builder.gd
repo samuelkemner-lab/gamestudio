@@ -85,6 +85,7 @@ var _default_rug: Node3D
 var _boxes: Array[Node3D] = []
 var _default_lamp: Node3D
 var _led_panel_mat: StandardMaterial3D
+var plaque_root: Node3D
 var _sweep: SpotLight3D
 var _sweep_t := 6.0
 
@@ -914,6 +915,28 @@ func apply_furniture(placed: Dictionary) -> void:
 		n.name = str(placed[slot])
 		furniture_root.add_child(n)
 		_build_furniture(n, str(placed[slot]))
+
+
+## Gold / platinum / diamond plaques on the right wall above the bed (stream milestones).
+func apply_plaques(owned: Array) -> void:
+	if plaque_root == null:
+		plaque_root = Node3D.new()
+		plaque_root.name = "Plaques"
+		add_child(plaque_root)
+	for c in plaque_root.get_children():
+		c.queue_free()
+	var cols := {"gold": Color("e0b13c"), "platinum": Color("d9dde6"), "diamond": Color("bfe9ff")}
+	for i in owned.size():
+		var z := 1.25 + i * 0.5
+		var p := Node3D.new()
+		p.position = Vector3(2.085, 1.72, z)
+		plaque_root.add_child(p)
+		part(p, box(Vector3(0.03, 0.52, 0.4)), Vector3.ZERO, mat(Color("15131a"), 0.4, ""))
+		part(p, box(Vector3(0.01, 0.46, 0.34)), Vector3(-0.017, 0, 0), mat(Color("eeeae2"), 0.9, ""))
+		var disc := part(p, cyl(0.12, 0.008), Vector3(-0.024, 0.05, 0), mat(cols.get(owned[i], Color.WHITE), 0.15, ""), Vector3(0, 0, 90))
+		(disc.material_override as StandardMaterial3D).metallic = 1.0
+		part(p, cyl(0.03, 0.01), Vector3(-0.028, 0.05, 0), mat(Color("111111"), 0.5, ""), Vector3(0, 0, 90))
+		part(p, box(Vector3(0.006, 0.04, 0.2)), Vector3(-0.022, -0.17, 0), mat(Color("2a2830"), 0.5, ""))
 
 
 func _build_furniture(g: Node3D, id: String) -> void:

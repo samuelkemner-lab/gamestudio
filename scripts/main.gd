@@ -3,7 +3,7 @@ extends Node3D
 ## Title screen → bedroom studio → phone DMs → rapper session in the booth → rating & payout.
 
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
-const VERSION := "v0.10 prototype"
+const VERSION := "v0.11 prototype"
 const DAWN := 30 * 60  # 06:00 the next morning
 const BOOTH_LOOK := Vector3(1.45, 1.2, -1.6)
 const CITY_ORIGIN := Vector3(0, 0, 700)  # the street lives far away from the flat interior
@@ -178,6 +178,11 @@ func _ready() -> void:
 	if game.inbox.is_empty():
 		game.nightly_messages()
 	game.notified.connect(_on_notified)
+	game.goal_completed.connect(_on_goal)
+	game.leveled.connect(func(lv):
+		_play_sfx(AmbienceSynth.cash())
+		show_toast("LEVEL UP! Producer level %d  (+€%d)" % [lv, 25 * lv]))
+	room.apply_plaques(game.plaques())
 	room.apply_furniture(game.placed)
 	_spawn_step()
 
@@ -241,6 +246,7 @@ func _tick_clock(delta: float) -> void:
 			city.update_hours(game.minutes)
 		_check_pending()
 		_maybe_call()
+		game.check_goals()
 	var line := "DAY %d   ·   %s   ·   %s" % [game.day, game.clock_text(), "ZUIDKADE" if in_city else "KADE 17"]
 	if player and player.riding:
 		line += "\nE-STEP  %d km/h  ·  battery %d%%" % [int(round(player.riding.speed * 3.6)), int(ceil(float(game.estep.battery)))]
@@ -681,6 +687,19 @@ func _on_call_missed(r: Dictionary) -> void:
 	game.message(str(r.name), "called u. u dont pick up?? hit me if ur free")
 
 
+func _on_goal(g: Dictionary) -> void:
+	_banner_from.text = "GOAL COMPLETE"
+	var reward := []
+	if int(g.money) > 0:
+		reward.append("+€%d" % int(g.money))
+	if int(g.rep) > 0:
+		reward.append("+%d REP" % int(g.rep))
+	reward.append("+%d XP" % int(g.xp))
+	_banner_text.text = "%s   %s" % [g.text, "  ".join(reward)]
+	_banner_t = 5.0
+	_play_sfx(AmbienceSynth.cash())
+
+
 func _on_notified(from: String, text: String) -> void:
 	if in_menu:
 		return
@@ -893,6 +912,7 @@ func complete_delivery() -> Dictionary:
 		tip = int(ceil(tip * 1.3))
 	game.deliveries += 1
 	game.add(pay + tip, 0, 0)
+	game.add_xp(10)
 	_play_sfx(AmbienceSynth.cash())
 	show_toast("Delivered! €%d%s%s" % [pay, "  +€%d tip" % tip if tip > 0 else "", "  (late: half pay)" if left < 0 else ""])
 	var res := {"pay": pay, "tip": tip, "late": left < 0}
@@ -940,6 +960,7 @@ func _on_session_finished(summary: Dictionary) -> void:
 
 func _on_results_closed() -> void:
 	_set_ui_mode(false)
+	room.apply_plaques(game.plaques())
 	for r in Rappers.all():
 		var key := "unlock_" + str(r.id)
 		if session.unlocked(r) and (int(r.get("min_cred", 0)) > 0 or int(r.get("min_rep", 0)) > 0) and not game.has_meta(key):

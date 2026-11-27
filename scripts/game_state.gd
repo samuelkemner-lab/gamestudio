@@ -4,6 +4,11 @@ extends Node
 
 signal changed
 signal notified(from: String, text: String)  # new message: phone banner
+signal goal_completed(goal: Dictionary)
+signal leveled(level: int)
+
+const RENT := 100  # per week, due every 7th night
+const PLAQUES := [[25000, "gold"], [100000, "platinum"], [500000, "diamond"]]
 
 const SAVE_PATH := "user://studio_grind_save.json"
 
@@ -36,6 +41,12 @@ var placed := {}
 var estep := {"owned": false, "battery": 100.0, "home": true, "motor": false, "big_battery": false}
 var deliveries := 0
 var night_noise_peak := 0.0
+# Progression (P5): producer XP/level, release streak, goals, misc stats
+var xp := 0
+var streak := 0
+var last_release_day := -10
+var goals_done: Array = []
+var stats := {"hot_sessions": 0}
 
 const MAMA := ["Are you eating well, jongen? x Mama", "Your aunt says she saw you on the internet. Is that good?",
 	"Sunday dinner at 5. Bring that rapper friend, he looks hungry.", "Did you sleep at all this week? Answer me.",
@@ -59,6 +70,10 @@ func add(money_delta: int, rep_delta: int, cred_delta: int) -> void:
 ## song = arranged in the Playlist (4+ bars, 2+ patterns): a full song streams 1.5x better.
 func record_track(rapper_id: String, stars: int, score: int, song: bool = false) -> void:
 	sessions += 1
+	# release streak: one track a night keeps it going (one missed night is forgiven)
+	if day != last_release_day:
+		streak = streak + 1 if day - last_release_day <= 2 else 1
+		last_release_day = day
 	tracks.append({"rapper": rapper_id, "stars": stars, "score": score, "day": day, "streams": 0, "song": song})
 	save()
 
@@ -66,6 +81,58 @@ func record_track(rapper_id: String, stars: int, score: int, song: bool = false)
 ## Minute (from 00:00 day 1 base) at which you pass out. Snacks keep you up longer.
 func dawn_minutes() -> int:
 	return 30 * 60 + int(buffs.get("awake", 0)) + Furniture.comfort_minutes(room_stats())
+
+
+# ---------- Progression ----------
+
+func level() -> int:
+	return int(sqrt(xp / 60.0)) + 1
+
+
+## XP for the next level (total).
+func level_xp(lv: int) -> int:
+	return (lv - 1) * (lv - 1) * 60
+
+
+func add_xp(n: int) -> void:
+	var before := level()
+	xp += n
+	var now := level()
+	if now > before:
+		money += 25 * now
+		leveled.emit(now)
+	changed.emit()
+
+
+## Streams multiplier from the release streak: +10% per night in a row (max +50%).
+func streak_mult() -> float:
+	return 1.0 + minf(maxf(streak - 1, 0) * 0.1, 0.5)
+
+
+func plaques() -> Array:
+	var out: Array = []
+	for p in PLAQUES:
+		if total_streams >= int(p[0]):
+			out.append(p[1])
+	return out
+
+
+## Pays out every goal that's done. Returns the completed ones.
+func check_goals() -> Array:
+	var done: Array = []
+	for g in Goals.active(self):
+		if Goals.progress(g.id, self) >= int(g.target):
+			goals_done.append(g.id)
+			money += int(g.money)
+			reputation += int(g.rep)
+			done.append(g)
+	for g in done:
+		add_xp(int(g.xp))
+		goal_completed.emit(g)
+	if not done.is_empty():
+		changed.emit()
+		save()
+	return done
 
 
 func room_stats() -> Dictionary:
@@ -284,6 +351,7 @@ func sleep() -> Dictionary:
 		var base := pow(float(t.stars), 2.2) * 160.0 * (1.0 + reputation / 40.0)
 		if t.get("song", false):
 			base *= 1.5
+		base *= streak_mult()
 		var s := int(base * randf_range(0.75, 1.25) / (1.0 + age * 0.35))
 		var pay_rate := 0.004
 		if i == leak:
@@ -296,7 +364,13 @@ func sleep() -> Dictionary:
 		lines.append({"rapper": t.rapper, "stars": t.stars, "streams": s, "euros": euros, "leaked": i == leak})
 	money += earned
 	total_streams += streams_night
+	if day - last_release_day >= 2:
+		streak = 0  # two nights without a release: streak over
 	day += 1
+	var rent := 0
+	if day > 1 and (day - 1) % 7 == 0:
+		rent = RENT
+		money -= rent
 	minutes = 22 * 60
 	noise = 0.0
 	booked_today.clear()
@@ -310,7 +384,9 @@ func sleep() -> Dictionary:
 	nightly_messages()
 	changed.emit()
 	save()
-	return {"day": day, "earned": earned, "streams": streams_night, "lines": lines, "leak": leak}
+	if rent > 0:
+		message("Huisbaas De Vries", "Rent for this week: €%d. %s" % [rent, "Thanks, received." if money >= 0 else "You're short. Pay up before it gets awkward."])
+	return {"day": day, "earned": earned, "streams": streams_night, "lines": lines, "leak": leak, "rent": rent, "streak": streak, "mult": streak_mult()}
 
 
 func reset() -> void:
@@ -337,6 +413,11 @@ func reset() -> void:
 	estep = {"owned": false, "battery": 100.0, "home": true, "motor": false, "big_battery": false}
 	deliveries = 0
 	night_noise_peak = 0.0
+	xp = 0
+	streak = 0
+	last_release_day = -10
+	goals_done = []
+	stats = {"hot_sessions": 0}
 	changed.emit()
 
 
@@ -352,6 +433,7 @@ func save() -> void:
 			"buffs": buffs, "casino_net": casino_net, "weather": weather,
 			"inbox": inbox, "call_log": call_log, "furniture": furniture, "placed": placed,
 			"estep": estep, "deliveries": deliveries,
+			"xp": xp, "streak": streak, "last_release_day": last_release_day, "goals_done": goals_done, "stats": stats,
 		}))
 
 
@@ -384,4 +466,11 @@ func load_game() -> void:
 		if st is Dictionary:
 			estep.merge(st, true)
 		deliveries = int(d.get("deliveries", 0))
+		xp = int(d.get("xp", 0))
+		streak = int(d.get("streak", 0))
+		last_release_day = int(d.get("last_release_day", -10))
+		goals_done = d.get("goals_done", [])
+		var stt = d.get("stats", {})
+		if stt is Dictionary:
+			stats.merge(stt, true)
 	changed.emit()

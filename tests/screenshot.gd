@@ -88,6 +88,10 @@ func _run() -> void:
 		await _save(out + "/shot_phone_huisraad.png")
 		main.phone.open_app("ruilmarkt")
 		await _save(out + "/shot_phone_ruilmarkt.png")
+		main.game.deliveries = 1
+		main.game.check_goals()
+		main.phone.open_app("goals")
+		await _save(out + "/shot_phone_goals.png")
 		main.toggle_phone()
 
 	if want.call("furnished"):

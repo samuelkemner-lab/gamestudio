@@ -34,6 +34,7 @@ func build() -> void:
 	_panel.add_child(row)
 	_avatar = PanelContainer.new()
 	_avatar.custom_minimum_size = Vector2(56, 56)
+	_avatar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(_avatar)
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL

@@ -163,7 +163,10 @@ func finish() -> Dictionary:
 	var rw := Judge.reward(rapper, stars, _gs.upgrades)
 	var bonus := Furniture.pay_mult(_gs.room_stats()) + (0.15 if hot else 0.0)
 	rw.money = int(round(rw.money * bonus))
+	if hot:
+		_gs.stats.hot_sessions = int(_gs.stats.get("hot_sessions", 0)) + 1
 	hot = false
+	_gs.add_xp(stars * 20)
 	_gs.add(rw.money, rw.rep, rw.cred)
 	var song: bool = _seq.arrangement().song
 	_gs.record_track(rapper.id, stars, best.score, song)

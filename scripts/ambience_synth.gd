@@ -185,6 +185,70 @@ static func flap() -> AudioStreamWAV:
 	return _wav(out, false)
 
 
+## Phone ringtone: two short trills, then silence (loops).
+static func ringtone() -> AudioStreamWAV:
+	var n := int(RATE * 2.2)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		var on := (t < 0.38) or (t > 0.5 and t < 0.88)
+		if on:
+			var f := 1320.0 if int(t * 24.0) % 2 == 0 else 1760.0
+			out[i] = (sin(TAU * f * t) * 0.5 + sin(TAU * f * 2.0 * t) * 0.12) * 0.45
+	return _wav(out, true)
+
+
+## Message ping: short two-note blip.
+static func ping() -> AudioStreamWAV:
+	var n := int(RATE * 0.22)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		var f := 988.0 if t < 0.09 else 1480.0
+		out[i] = sin(TAU * f * t) * exp(-fmod(t, 0.11) * 30.0) * 0.4
+	return _wav(out, false)
+
+
+## E-step motor whine (loop). Pitch it with the speed.
+static func motor() -> AudioStreamWAV:
+	var n := int(RATE * 1.0)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		# 220 Hz fundamental (exact number of cycles per second = seamless loop) + PWM-ish harmonics
+		var v := sin(TAU * 220.0 * t) * 0.35 + sin(TAU * 440.0 * t) * 0.18 + sin(TAU * 660.0 * t) * 0.08
+		v += (randf() * 2.0 - 1.0) * 0.04
+		out[i] = v * 0.5
+	return _wav(out, true)
+
+
+## Little thumb bell on the handlebar.
+static func bell() -> AudioStreamWAV:
+	var n := int(RATE * 0.9)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		var hit := fmod(t, 0.18)
+		out[i] = (sin(TAU * 2350.0 * t) + sin(TAU * 3170.0 * t) * 0.5) * exp(-hit * 18.0) * 0.3 * (1.0 if t < 0.36 else 0.0)
+	return _wav(out, false)
+
+
+## Coins / payout jingle.
+static func cash() -> AudioStreamWAV:
+	var n := int(RATE * 0.5)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		var f: float = [1568.0, 2093.0, 2637.0][mini(int(t / 0.12), 2)]
+		out[i] = sin(TAU * f * t) * exp(-fmod(t, 0.12) * 25.0) * 0.35
+	return _wav(out, false)
+
+
 static func _seam(out: PackedFloat32Array) -> PackedFloat32Array:
 	var f := int(RATE * 0.25)
 	var n := out.size()

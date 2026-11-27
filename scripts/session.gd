@@ -29,6 +29,7 @@ var last := {}
 var easy_mode := true
 var hype := 0  # bonus points on the next take (you hyped the rapper up)
 var drink_given := false
+var hot := false  # booked by answering their call: +15% pay
 
 var _world: Node3D
 var _seq: Sequencer
@@ -69,11 +70,14 @@ func book(r: Dictionary) -> void:
 	if not can_book(r):
 		return
 	rapper = r
+	hot = false
 	_gs.booked_today.append(r.id)
 	takes_left = int(r.patience)
 	if int(_gs.buffs.get("chill", 0)) > 0:
 		takes_left += 1  # a chill studio: one extra take before they lose it
 		_gs.buffs.chill = 0
+	if int(_gs.room_stats().vibe) >= 12:
+		takes_left += 1  # the room feels like a real studio: they're more patient
 	takes_done = 0
 	hype = 0
 	drink_given = false
@@ -157,6 +161,9 @@ func finish() -> Dictionary:
 		return {}
 	var stars: int = best.stars
 	var rw := Judge.reward(rapper, stars, _gs.upgrades)
+	var bonus := Furniture.pay_mult(_gs.room_stats()) + (0.15 if hot else 0.0)
+	rw.money = int(round(rw.money * bonus))
+	hot = false
 	_gs.add(rw.money, rw.rep, rw.cred)
 	var song: bool = _seq.arrangement().song
 	_gs.record_track(rapper.id, stars, best.score, song)

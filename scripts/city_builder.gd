@@ -682,6 +682,7 @@ func _storefront(s: Dictionary) -> void:
 	part(g, box(Vector3(0.06, 0.5, 0.06)), Vector3(dx - 0.45, 1.2, 0.43), mat(Color("c9c9d4"), 0.3, ""))
 	var door := solid(Vector3(1.8, 2.7, 0.6), g.transform * Vector3(dx, 1.35, 0.5), "shop", str(s.door), g.rotation_degrees.y)
 	door.set_meta("shop_id", s.id)
+	_shop_reg(str(s.id)).door_out = g.transform * Vector3(dx, 0.05, 2.2)  # street side of the door
 	# sign: dark plate + neon text + neon tube outline
 	var sign_w: float = minf(w * 0.86, 1.0 + str(s.name).length() * 0.62)
 	part(g, box(Vector3(sign_w, 1.15, 0.18)), Vector3(0, 4.95, 0.3), mat(Color("0f0d15"), 0.6, ""))

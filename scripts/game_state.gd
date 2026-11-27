@@ -3,6 +3,7 @@ extends Node
 ## Player progress: money, reputation, street cred, released tracks. Saved to user://.
 
 signal changed
+signal notified(from: String, text: String)  # new message: phone banner
 
 const SAVE_PATH := "user://studio_grind_save.json"
 
@@ -23,6 +24,28 @@ var total_streams := 0
 var buffs := {"chill": 0, "awake": 0, "gift": false}
 var casino_net := 0
 var weather := "rain"  # "dry" | "rain" | "mist"  (Rotterdam in November: it rains a lot)
+# GRIND OS (phone)
+var inbox: Array = []  # [{from, text, day, time, read, me}]
+var call_log: Array = []  # [{from, day, time, kind: answered/missed/declined}]
+var pending := {}  # rapper on the way after a call: {rapper, until}
+var calls_tonight := 0
+# Home (Huisraad): owned furniture ids, slot -> placed id
+var furniture: Array = []
+var placed := {}
+# E-step: owned, battery 0..100, home (= taken upstairs, charges overnight), upgrades
+var estep := {"owned": false, "battery": 100.0, "home": true, "motor": false, "big_battery": false}
+var deliveries := 0
+var night_noise_peak := 0.0
+
+const MAMA := ["Are you eating well, jongen? x Mama", "Your aunt says she saw you on the internet. Is that good?",
+	"Sunday dinner at 5. Bring that rapper friend, he looks hungry.", "Did you sleep at all this week? Answer me.",
+	"I put a pan of soup by your door. Don't let it go bad."]
+const RAPPER_AGAIN := {
+	"big_earl": ["u free tonight? got a new verse, real hip hop", "yo producer. same time? bring the dusty drums"],
+	"lil_tear": ["cant sleep again. can we make something sad", "my ex liked my last story. i need a song NOW"],
+	"ghost": ["studio tonight. dont be late", "got a new flow. need a cold beat"],
+	"spike": ["BRO TONIGHT?? i need ENERGY", "yo the crowd wants more. lets cook"],
+}
 
 
 func add(money_delta: int, rep_delta: int, cred_delta: int) -> void:
@@ -42,7 +65,144 @@ func record_track(rapper_id: String, stars: int, score: int, song: bool = false)
 
 ## Minute (from 00:00 day 1 base) at which you pass out. Snacks keep you up longer.
 func dawn_minutes() -> int:
-	return 30 * 60 + int(buffs.get("awake", 0))
+	return 30 * 60 + int(buffs.get("awake", 0)) + Furniture.comfort_minutes(room_stats())
+
+
+func room_stats() -> Dictionary:
+	return Furniture.stats(placed)
+
+
+# ---------- Phone ----------
+
+func message(from: String, text: String, me := false) -> void:
+	inbox.append({"from": from, "text": text, "day": day, "time": clock_text(), "read": me, "me": me})
+	if inbox.size() > 200:
+		inbox = inbox.slice(inbox.size() - 200)
+	if not me:
+		notified.emit(from, text)
+	changed.emit()
+
+
+func unread(from := "") -> int:
+	var n := 0
+	for m in inbox:
+		if not m.read and (from == "" or m.from == from):
+			n += 1
+	return n
+
+
+func mark_read(from: String) -> void:
+	for m in inbox:
+		if m.from == from:
+			m.read = true
+	changed.emit()
+
+
+## Contacts ordered by latest message.
+func threads() -> Array:
+	var order: Array = []
+	for i in range(inbox.size() - 1, -1, -1):
+		var f: String = inbox[i].from
+		if not f in order:
+			order.append(f)
+	return order
+
+
+func log_call(from: String, kind: String) -> void:
+	call_log.append({"from": from, "day": day, "time": clock_text(), "kind": kind})
+	if call_log.size() > 60:
+		call_log = call_log.slice(call_log.size() - 60)
+	changed.emit()
+
+
+## New night: rappers who are unlocked DM you, plus life happening around you.
+func nightly_messages() -> void:
+	for r in Rappers.all():
+		if street_cred >= int(r.get("min_cred", 0)) and reputation >= int(r.get("min_rep", 0)):
+			var again: Array = RAPPER_AGAIN.get(r.id, [])
+			var first := true
+			for m in inbox:
+				if m.from == r.name:
+					first = false
+					break
+			message(r.name, r.dm if first or again.is_empty() else again[randi() % again.size()])
+	if day == 1:
+		message("Zoef", "Earn cash on your own schedule. Open Zoef and go online to deliver food in your area.")
+		message("Ruilmarkt", "Welcome! There's a used e-step for sale near you. Check the app.")
+	elif randf() < 0.45:
+		message("Mama", MAMA[randi() % MAMA.size()])
+	if night_noise_peak > 70.0:
+		message("Buurman Henk", "Some of us start work at 7. Just saying. Henk (no. 15)")
+	night_noise_peak = 0.0
+
+
+# ---------- Furniture ----------
+
+func buy_furniture(id: String, price := -1) -> bool:
+	var it := Furniture.item(id)
+	var cost := int(it.get("price", 0)) if price < 0 else price
+	if it.is_empty() or id in furniture or money < cost:
+		return false
+	money -= cost
+	furniture.append(id)
+	placed[it.slot] = id  # new stuff goes straight into the room
+	changed.emit()
+	save()
+	return true
+
+
+func place(id: String) -> void:
+	var it := Furniture.item(id)
+	if it.is_empty() or not id in furniture:
+		return
+	if placed.get(it.slot, "") == id:
+		placed.erase(it.slot)  # put it back in storage
+	else:
+		placed[it.slot] = id
+	changed.emit()
+	save()
+
+
+# ---------- E-step ----------
+
+const STEP_ITEMS := [
+	{"id": "estep", "name": "Used e-step", "price": 120, "desc": "\"Works fine, battery ok-ish, small scratch.\" 22 km/h. Picks you up from your front door."},
+	{"id": "step_motor", "name": "Motor tune (e-step)", "price": 90, "desc": "Someone's cousin unlocks the speed limiter. 31 km/h.", "needs": "estep"},
+	{"id": "step_battery", "name": "Big battery (e-step)", "price": 70, "desc": "Twice the range before you have to kick-push.", "needs": "estep"},
+]
+
+
+func step_owned(id: String) -> bool:
+	match id:
+		"estep":
+			return bool(estep.owned)
+		"step_motor":
+			return bool(estep.motor)
+		"step_battery":
+			return bool(estep.big_battery)
+	return false
+
+
+func buy_step_item(id: String) -> bool:
+	var it: Dictionary = {}
+	for x in STEP_ITEMS:
+		if x.id == id:
+			it = x
+	if it.is_empty() or step_owned(id) or money < int(it.price) or (it.has("needs") and not step_owned(it.needs)):
+		return false
+	money -= int(it.price)
+	match id:
+		"estep":
+			estep.owned = true
+			estep.battery = 100.0
+			estep.home = true
+		"step_motor":
+			estep.motor = true
+		"step_battery":
+			estep.big_battery = true
+	changed.emit()
+	save()
+	return true
 
 
 func add_buff(id: String, amount: int = 1) -> void:
@@ -100,6 +260,11 @@ func buy(upgrade: String) -> bool:
 	return true
 
 
+func clock_text_at(m: int) -> String:
+	var mm := m % (24 * 60)
+	return "%02d:%02d" % [mm / 60, mm % 60]
+
+
 func clock_text() -> String:
 	var m := minutes % (24 * 60)
 	return "%02d:%02d" % [m / 60, m % 60]
@@ -135,9 +300,14 @@ func sleep() -> Dictionary:
 	minutes = 22 * 60
 	noise = 0.0
 	booked_today.clear()
+	pending = {}
+	calls_tonight = 0
+	if estep.owned and estep.home:
+		estep.battery = 100.0
 	buffs.awake = 0
 	buffs.gift = false
 	roll_weather()
+	nightly_messages()
 	changed.emit()
 	save()
 	return {"day": day, "earned": earned, "streams": streams_night, "lines": lines, "leak": leak}
@@ -158,6 +328,15 @@ func reset() -> void:
 	buffs = {"chill": 0, "awake": 0, "gift": false}
 	casino_net = 0
 	weather = "rain"
+	inbox = []
+	call_log = []
+	pending = {}
+	calls_tonight = 0
+	furniture = []
+	placed = {}
+	estep = {"owned": false, "battery": 100.0, "home": true, "motor": false, "big_battery": false}
+	deliveries = 0
+	night_noise_peak = 0.0
 	changed.emit()
 
 
@@ -171,6 +350,8 @@ func save() -> void:
 			"sessions": sessions, "tracks": tracks, "day": day, "upgrades": upgrades,
 			"booked_today": booked_today, "total_streams": total_streams,
 			"buffs": buffs, "casino_net": casino_net, "weather": weather,
+			"inbox": inbox, "call_log": call_log, "furniture": furniture, "placed": placed,
+			"estep": estep, "deliveries": deliveries,
 		}))
 
 
@@ -193,4 +374,14 @@ func load_game() -> void:
 			buffs.merge(b, true)
 		casino_net = int(d.get("casino_net", 0))
 		weather = str(d.get("weather", weather))
+		inbox = d.get("inbox", [])
+		call_log = d.get("call_log", [])
+		furniture = d.get("furniture", [])
+		var pl = d.get("placed", {})
+		if pl is Dictionary:
+			placed = pl
+		var st = d.get("estep", {})
+		if st is Dictionary:
+			estep.merge(st, true)
+		deliveries = int(d.get("deliveries", 0))
 	changed.emit()

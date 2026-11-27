@@ -17,10 +17,12 @@ Een studio-producer-sim: je begint als wannabe SoundCloud-producer in je slaapka
 | Z | Liggen (plat op de grond); SPATIE = stap voor stap weer opstaan |
 | SPATIE | Springen / opstaan / van stoel of bed af |
 | F | Zaklamp |
+| W/S/A/D op de e-step | Gas, remmen, sturen (B = bel, E of SPATIE = afstappen) |
+| Y / N | Telefoon opnemen / weigeren |
 | E | Interactie: monitor = LOOPR, stoel = zitten, bed = liggen (nog een keer E = slapen), lichtknop, deur, winkels, mensen aanspreken, kat aaien, bankjes. Losse spullen (blikjes, fles, bal, doos) oppakken / neerleggen |
 | Linkermuis / rechtermuis | Opgepakt voorwerp gooien / neerleggen |
 | 1–4 | Keuze in een gesprek (of pattern A–D in LOOPR) |
-| TAB | Telefoon: DM's (boeken), Shop, Tracks (streams), hints Easy/Pro |
+| TAB | Telefoon (GRIND OS): Messages, Phone, WAVR, Gear, Huisraad, Ruilmarkt, Zoef, Settings |
 | Ctrl+S | Project opslaan in LOOPR (beschermt tegen een pc-crash) |
 | Ctrl+Z | Ongedaan maken in LOOPR |
 | F9 | Grafische kwaliteit High/Low (Low = sneller op zwakke pc's) |
@@ -36,6 +38,29 @@ Vereist een videokaart met Vulkan-ondersteuning; dat heeft vrijwel elke pc van n
 4. Klik **RECORD TAKE**. De rapper rapt twee maten en geeft een oordeel (1–5 sterren). Elke retake kost geduld.
 5. Klik **FINISH** om de beste take uit te brengen. Je krijgt geld, reputatie en Street Cred.
 6. Pas op met het volume: de geluidsmeter loopt op. Bij 100% belt de buurman de politie (€40 boete).
+
+## In v0.10: telefoon, e-step, inrichten en bijbaantje
+Masterplan: docs/PROGRESSION_MASTERPLAN.md (P1–P4 gebouwd, P5–P6 gepland).
+- **GRIND OS:** homescreen met app-iconen en badges.
+  - Messages: chats per contact; rappers DM'en elke nacht, plus Mama, Buurman Henk, Zoef en Ruilmarkt.
+  - Phone: gesprekslog.
+  - Andere apps: WAVR (streams), Gear, Huisraad, Ruilmarkt, Zoef, Settings.
+  - Meldingen schuiven bovenin beeld.
+- **Rappers bellen je.** Opnemen (Y) thuis = direct sessie met +15% ("hot session"). Op straat zegt de rapper "ik ben er over 40 min": wees op tijd thuis, anders vertrekt hij (−1 REP). Uitnodigen via Messages vanaf straat werkt hetzelfde.
+- **E-step** (Ruilmarkt, €120):
+  - opstappen met E; W/S/A/D, bel op B;
+  - snelheid en batterij in de HUD;
+  - te hard ergens tegenaan = eraf vallen; een voetganger raken = −1 REP;
+  - parkeer hem bij je voordeur als je naar binnen gaat, dan laadt hij 's nachts op;
+  - upgrades: Motor tune (31 km/u), Grote accu (2× bereik).
+- **Huisraad:** 14 meubels in 6 plekken (zitplek, kleed, tafel, voorwand, wandkunst, lamp). Kamerstats:
+  - VIBE = meer sessiegeld (tot +30%), en vanaf 12 een extra take;
+  - AKOESTIEK = de geluidsmeter loopt trager op;
+  - COMFORT = je blijft langer op.
+
+  De verhuisdozen verdwijnen zodra er iets aan de voorwand staat. Een minikoelkast ontgrendelt "drankje aanbieden".
+- **Ruilmarkt:** elke nacht één tweedehands meubel met 30% korting.
+- **Zoef (bijbaantje):** eten ophalen bij Snackbar De Hoek en afleveren bij een deur (lichtbaken). Je verdient €6–14 plus fooi voor snelheid (+30% bij regen); te laat = half loon. Met de step haal je meer ritten en fooi per nacht.
 
 ## In v0.9.1: Rotterdamse skyline
 - Over de Maas: een witte tuibrug met geknikte "zwanenhals"-pyloon, 40 tuien, basculedeel en verlicht dek, een uitkijktoren met kraaiennest en ring in het park, een markthal-boog met gloeiende glazen kopse kanten, gekantelde gele kubuswoningen naast een potloodtoren, een cluster hoge torens (gestapelde verschoven blokken, slanke toren met lichtkroon, toren met overstek), een leunend kantoor met ledgevel en een rood gestreepte toren.

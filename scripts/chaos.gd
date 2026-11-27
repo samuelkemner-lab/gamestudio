@@ -64,7 +64,9 @@ func _process(delta: float) -> void:
 		var rise := RISE * (0.6 if _gs.has("foam") else 1.0)
 		if _gs.buffs.get("gift", false):
 			rise *= 0.7  # stroopwafels for the neighbours
+		rise *= Furniture.noise_mult(_gs.room_stats())  # rugs, sofa, diffuser
 		_gs.noise = minf(_gs.noise + rise * master * master * delta, POLICE_AT)
+		_gs.night_noise_peak = maxf(_gs.night_noise_peak, _gs.noise)
 	else:
 		_gs.noise = maxf(_gs.noise - FALL * delta, 0.0)
 	if _gs.noise >= WARN_AT and not _warned:

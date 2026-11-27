@@ -53,7 +53,12 @@ Lees **docs/LOOPR_DAW_MASTERPROMPT.md** vóór elke taak aan LOOPR. Richting: Ba
 - `scripts/session.gd`: sessie-state machine (ARRIVING → WAITING → RECORDING → REVIEW → LEAVING)
 - `scripts/npc.gd`: Kenney Mini Character + accessoires, lopen, animaties, tekstballon, brabbelstem (`voice_synth.gd`)
 - `scripts/chaos.gd`: geluidsmeter → buren → politie; `scripts/game_state.gd`: geld/rep/cred + save (user://)
-- `scripts/phone_ui.gd`, `scripts/results_ui.gd`, `scripts/ui_kit.gd`: telefoon, resultaten, gedeelde UI-stijl
+- `scripts/phone_ui.gd` (GRIND OS: `APPS`, `open_app()`, `open_thread()`, app-iconen via de inner class `AppIcon`), `scripts/call_ui.gd` (inkomende oproep, Y/N, gemist na 15 s), `scripts/results_ui.gd`, `scripts/ui_kit.gd`: telefoon, resultaten, gedeelde UI-stijl
+- Progressie (docs/PROGRESSION_MASTERPLAN.md, fases P1–P6):
+  - `game_state`: `inbox`/`message()`/`nightly_messages()`, `call_log`, `pending` (rapper onderweg, deadline), `furniture`/`placed`, `estep`, `deliveries`.
+  - main: `_maybe_call()`, `_set_pending()`/`_check_pending()`, Zoef (`_on_zoef`, `_zoef_update`, `complete_delivery`), step (`_spawn_step`, `_leave_city`).
+  - `scripts/furniture.gd`: catalogus, slots en stats (VIBE/AKOESTIEK/COMFORT) met effecten in session, chaos en `dawn_minutes`; `room_builder.apply_furniture()`.
+  - `scripts/estep.gd`: e-step; rijden in `player._ride()`, `mount()`/`dismount()`, signaal `crashed`.
 - `assets/models/quaternius_characters`: CC0-personages met normale verhoudingen (Quaternius Ultimate Modular). Armature heeft schaal 100: props in een 0.01-holder onder een BoneAttachment3D. Animaties heten `CharacterArmature|Idle_Neutral`, `|Walk`, `|Wave`, enz. Bron-GLB's staan in Git LFS: ophalen via media.githubusercontent.com
 - `scripts/city_builder.gd` (extends RoomBuilder): de buitenwereld **Zuidkade**, ver weg geplaatst (`main.CITY_ORIGIN`). Hoofdstraat langs X, zijstraat naar de kade (Maas, brug, skyline). Winkels via `SHOPS` + `_storefront()`; de deur is een StaticBody met meta `interact = "shop"` en `shop_id`. Verkeer (`_drive`, remt voor de speler), voetgangers (NPC-loops), onzichtbare grenswanden. Let op: `look_at_from_position` werkt met globale coördinaten; gebruik lokale transforms
 - `scripts/city_ui.gd`: winkelpanelen (Wax & Wires = shopitems tegen cashprijs −15%, Groene Wolk, Snackbar De Hoek, Nachtwinkel, Lucky Stack-casino, Maas Sound = toekomstige progressie); `scripts/casino.gd`: slots (~87,5% terug) en roulette, pure logica

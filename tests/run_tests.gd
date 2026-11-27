@@ -408,7 +408,8 @@ func _run() -> void:
 	main.city_ui.close()
 	# booking from the street is blocked, home door brings you back
 	main._on_book(Rappers.BIG_EARL)
-	check(not sess.is_active(), "can't book a session while outside")
+	check(not sess.is_active() and gs.pending.get("rapper", "") == "big_earl", "inviting from the street: rapper heads to your place")
+	gs.pending = {}
 	main._on_interacted(shops["home"])
 	check(not main.in_city and main.room.visible, "Kade 17 door takes you home")
 	# pre-roll: next rapper gets an extra take
@@ -487,6 +488,8 @@ func _run() -> void:
 	gs.reset()
 	sess.book(Rappers.LIL_TEAR)
 	sess.state = Session.State.WAITING
+	gs.furniture.append("mini_fridge")
+	gs.placed["front"] = "mini_fridge"
 	var takes0 := sess.takes_left
 	main._on_interacted(sess.npc.body)
 	check(main.talk_ui.visible, "talk to the rapper")
@@ -496,6 +499,123 @@ func _run() -> void:
 	main.talk_ui.choose("hype")
 	check(sess.hype == 5, "hype the rapper up")
 	sess._leave()
+
+	# ---------- v0.10: GRIND OS, calls, furniture, e-step, Zoef ----------
+	gs.reset()
+	sess.state = Session.State.IDLE
+	main._set_ui_mode(false)
+	gs.nightly_messages()
+	check(gs.unread() >= 2 and gs.threads().size() >= 2, "new night: DMs from rappers + Zoef/Ruilmarkt (%d unread)" % gs.unread())
+	main.toggle_phone()
+	check(main.phone.visible and main.phone.app == "", "phone opens on the home screen")
+	for a in PhoneUI.APPS:
+		main.phone.open_app(a.id)
+		check(main.phone.app == a.id and main.phone._screen.get_child_count() > 0, "app opens: " + a.id)
+	main.phone.open_thread("Lil Tear")
+	check(gs.unread("Lil Tear") == 0, "reading a chat clears its badge")
+	main.toggle_phone()
+	# call at home: answer = hot session
+	main.call_ui.ring(Rappers.LIL_TEAR)
+	check(main.call_ui.ringing and main.call_ui.visible, "incoming call rings")
+	main.call_ui.answer()
+	check(sess.is_active() and sess.hot and gs.call_log[-1].kind == "answered", "answering at home = hot session")
+	sess._leave()
+	sess.state = Session.State.IDLE
+	main.results.visible = false
+	main._set_ui_mode(false)
+	# call on the street: pending, then go home in time
+	gs.booked_today.clear()
+	main.travel(true)
+	main.call_ui.ring(Rappers.BIG_EARL)
+	main.call_ui.answer()
+	check(not sess.is_active() and gs.pending.get("rapper", "") == "big_earl", "answering outside: rapper is on the way")
+	main.travel(false)
+	check(sess.is_active() and sess.rapper.id == "big_earl" and sess.hot and gs.pending.is_empty(), "home in time = session starts")
+	sess._leave()
+	sess.state = Session.State.IDLE
+	main.results.visible = false
+	main._set_ui_mode(false)
+	# too late
+	gs.booked_today.clear()
+	main.travel(true)
+	main._set_pending(Rappers.LIL_TEAR, false)
+	var rep_before := gs.reputation
+	gs.minutes += 41
+	main._check_pending()
+	check(gs.pending.is_empty() and not sess.is_active() and gs.reputation == maxi(rep_before - 1, 0), "too late: rapper leaves, −1 REP")
+	# missed call
+	main.call_ui.ring(Rappers.BIG_EARL)
+	main.call_ui._t = CallUI.RING_TIME
+	main.call_ui._process(0.1)
+	check(not main.call_ui.ringing and gs.call_log[-1].kind == "missed", "unanswered call = missed")
+	main.travel(false)
+	# furniture
+	gs.money = 1000
+	check(gs.buy_furniture("sofa") and gs.placed.get("seat") == "sofa", "buy a sofa: placed in the room")
+	main.room.apply_furniture(gs.placed)
+	check(main.room.furniture_root.get_child_count() == 1, "sofa is built in the room")
+	check(gs.buy_furniture("mini_fridge"), "buy a mini fridge")
+	main.room.apply_furniture(gs.placed)
+	check(not main.room._boxes[0].visible, "front-wall furniture replaces the moving boxes")
+	var st := gs.room_stats()
+	check(int(st.vibe) == 11 and Furniture.pay_mult(st) > 1.1, "room stats: VIBE %d" % st.vibe)
+	gs.buy_furniture("led_panel")
+	check(int(gs.room_stats().vibe) >= 12, "VIBE 12+")
+	gs.booked_today.clear()
+	sess.book(Rappers.LIL_TEAR)
+	check(sess.takes_left == int(Rappers.LIL_TEAR.patience) + 1, "VIBE 12+: rapper has one more take")
+	sess._leave()
+	sess.state = Session.State.IDLE
+	main.results.visible = false
+	main._set_ui_mode(false)
+	check(gs.dawn_minutes() > 30 * 60, "COMFORT: you stay up longer (+%d min)" % (gs.dawn_minutes() - 30 * 60))
+	gs.place("sofa")
+	check(not gs.placed.has("seat"), "place again = back in storage")
+	# e-step
+	gs.money = 500
+	check(gs.buy_step_item("estep") and gs.estep.owned, "buy the used e-step")
+	check(not gs.buy_step_item("estep"), "can't buy it twice")
+	main._on_step_bought("estep")
+	check(main.estep != null and main.estep.body.get_meta("interact") == "estep", "e-step spawned in the city")
+	main.travel(true)
+	check(main.estep.position.distance_to(main._home_door_local()) < 3.0, "parked by the front door of Kade 17")
+	main._on_interacted(main.estep.body)
+	check(pl.riding == main.estep, "get on the e-step")
+	var b0 := float(gs.estep.battery)
+	var p0: Vector3 = pl.global_position
+	main.estep.speed = 5.0
+	pl.global_position += -pl.transform.basis.z * 4.0
+	main.estep._physics_process(0.1)
+	check(float(gs.estep.battery) < b0, "riding drains the battery (%.1f%%)" % gs.estep.battery)
+	check(main.estep.max_speed() == EStep.BASE_SPEED, "stock speed 22 km/h")
+	gs.buy_step_item("step_motor")
+	check(main.estep.max_speed() == EStep.TUNED_SPEED, "motor tune: faster")
+	pl.dismount()
+	check(pl.riding == null and not main.estep.body.get_child(0).disabled, "get off: step parked")
+	pl.global_position = p0
+	main.estep.position = main._home_door_local() + Vector3(1.6, -0.05, -0.4)
+	main.travel(false)
+	check(gs.estep.home, "parked by your door = taken upstairs")
+	gs.estep.battery = 30.0
+	gs.sleep()
+	main.results.visible = false
+	check(is_equal_approx(float(gs.estep.battery), 100.0), "charged overnight")
+	# Zoef
+	main.travel(true)
+	main._on_zoef("start")
+	check(not main.zoef.is_empty() and main._zoef_marker != null, "Zoef: order accepted, pickup marker")
+	pl.global_position = city.to_global(main.zoef.pick)
+	main._zoef_update()
+	check(main.zoef.picked, "picked up at the snackbar")
+	var zoef_cash := gs.money
+	pl.global_position = city.to_global(main.zoef.drop)
+	main._zoef_update()
+	check(main.zoef.is_empty() and gs.money > zoef_cash and gs.deliveries == 1, "delivered: paid €%d" % (gs.money - zoef_cash))
+	main._on_zoef("start")
+	gs.minutes += 999
+	var late: Dictionary = main.complete_delivery()
+	check(late.late, "late delivery: half pay")
+	main.travel(false)
 
 	print("RESULT: ", "PASS" if failures == 0 else "FAIL (%d)" % failures)
 	quit(failures)

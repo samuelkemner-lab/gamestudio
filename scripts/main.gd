@@ -3,7 +3,7 @@ extends Node3D
 ## Title screen → bedroom studio → phone DMs → rapper session in the booth → rating & payout.
 
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
-const VERSION := "v0.9.1 prototype"
+const VERSION := "v0.10 prototype"
 const DAWN := 30 * 60  # 06:00 the next morning
 const BOOTH_LOOK := Vector3(1.45, 1.2, -1.6)
 const CITY_ORIGIN := Vector3(0, 0, 700)  # the street lives far away from the flat interior
@@ -22,6 +22,16 @@ var results: ResultsUI
 var city: CityBuilder
 var city_ui: CityUI
 var talk_ui: TalkUI
+var call_ui: CallUI
+var zoef := {}  # active delivery (Zoef app)
+var estep: EStep
+var _zoef_marker: Node3D
+var _batt_warned := false
+var _banner: PanelContainer
+var _banner_from: Label
+var _banner_text: Label
+var _banner_t := 0.0
+var _sfx: AudioStreamPlayer
 var _talk_npc: NPC
 var _flyers_day := -1
 var _flyers_today := 0
@@ -98,6 +108,7 @@ func _ready() -> void:
 	add_child(player)
 	player.interacted.connect(_on_interacted)
 	player.interact_empty.connect(_on_interact_empty)
+	player.crashed.connect(_on_crash)
 	city.set_player(player)
 	city.game = game
 
@@ -122,6 +133,18 @@ func _ready() -> void:
 	phone.book_requested.connect(_on_book)
 	phone.buy_requested.connect(_on_buy)
 	phone.hints_toggled.connect(func(easy): session.easy_mode = easy; loopr.update_session())
+	phone.ctx = self
+	phone.quality_toggled.connect(_toggle_quality)
+	phone.furniture_changed.connect(func(): room.apply_furniture(game.placed))
+	phone.step_bought.connect(_on_step_bought)
+	phone.zoef_requested.connect(_on_zoef)
+
+	call_ui = CallUI.new()
+	layer.add_child(call_ui)
+	call_ui.build()
+	call_ui.answered.connect(_on_call_answered)
+	call_ui.declined.connect(_on_call_declined)
+	call_ui.missed.connect(_on_call_missed)
 
 	city_ui = CityUI.new()
 	layer.add_child(city_ui)
@@ -152,6 +175,11 @@ func _ready() -> void:
 
 	game.changed.connect(_update_stats)
 	_update_stats()
+	if game.inbox.is_empty():
+		game.nightly_messages()
+	game.notified.connect(_on_notified)
+	room.apply_furniture(game.placed)
+	_spawn_step()
 
 	if DisplayServer.get_name() != "headless":
 		show_menu()
@@ -194,6 +222,10 @@ func _process(delta: float) -> void:
 	if fill:
 		fill.bg_color = UIKit.CYAN.lerp(UIKit.POP, game.noise / 100.0)
 	_tick_clock(delta)
+	if _banner_t > 0.0:
+		_banner_t -= delta
+		_banner.modulate.a = clampf(_banner_t * 2.0, 0.0, 1.0)
+		_banner.position = Vector2((vp.x - _banner.size.x) / 2.0, 18)
 	if _toast_time > 0.0:
 		_toast_time -= delta
 		toast_label.modulate.a = clampf(_toast_time, 0.0, 1.0)
@@ -207,7 +239,17 @@ func _tick_clock(delta: float) -> void:
 		game.minutes += 1
 		if in_city:
 			city.update_hours(game.minutes)
-	clock_label.text = "DAY %d   ·   %s   ·   %s" % [game.day, game.clock_text(), "ZUIDKADE" if in_city else "KADE 17"]
+		_check_pending()
+		_maybe_call()
+	var line := "DAY %d   ·   %s   ·   %s" % [game.day, game.clock_text(), "ZUIDKADE" if in_city else "KADE 17"]
+	if player and player.riding:
+		line += "\nE-STEP  %d km/h  ·  battery %d%%" % [int(round(player.riding.speed * 3.6)), int(ceil(float(game.estep.battery)))]
+	if not zoef.is_empty():
+		var left := int(zoef.until) - game.minutes
+		line += "\nZOEF  ·  %s  ·  %s" % [("deliver to " + str(zoef.address)) if zoef.picked else "pick up at Snackbar De Hoek", ("%d:%02d left" % [left / 60, left % 60]) if left >= 0 else "LATE"]
+	if not game.pending.is_empty():
+		line += "\n%s arrives at %s" % [Rappers.by_id(str(game.pending.rapper)).get("name", "?"), game.clock_text_at(int(game.pending.until))]
+	clock_label.text = line
 	if game.minutes >= game.dawn_minutes() and not session.is_active() and not results.visible and not city_ui.visible:
 		if in_city:
 			travel(false)
@@ -312,6 +354,9 @@ func _on_interacted(target: Object) -> void:
 		"switch":
 			room.toggle_lights()
 			player._play_fx(AmbienceSynth.tick(1400.0))
+		"estep":
+			player.mount(target.get_meta("estep"))
+			show_toast("W go · S brake · A/D steer · B bell · E/SPACE get off")
 		"cat":
 			city.cat.pet()
 			if _cat_day != game.day:
@@ -366,7 +411,7 @@ func _talk_rapper() -> void:
 	talk_ui.open(str(r.name), "%s  ·  %d takes left" % [str(r.style), session.takes_left], [
 		["What do you want on this beat?", "brief"],
 		["Hype them up  (+5 on next take)", "hype", session.hype == 0],
-		["Offer a drink  (+1 take)", "drink", not session.drink_given],
+		["Offer a cold drink  (+1 take)" if game.placed.get("front", "") == "mini_fridge" else "Offer a drink  (needs a mini fridge)", "drink", not session.drink_given and game.placed.get("front", "") == "mini_fridge"],
 		["Small talk", "chat"],
 	])
 	_set_ui_mode(true)
@@ -460,6 +505,8 @@ func _set_city_active(on: bool) -> void:
 ## Instant move between the flat and the street (fades are done by go_outside / go_home).
 func travel(to_city: bool) -> void:
 	sequencer.stop()
+	if not to_city:
+		_leave_city()
 	_set_city_active(to_city)
 	if to_city:
 		player.global_position = city.spawn_point()
@@ -469,6 +516,11 @@ func travel(to_city: bool) -> void:
 		player.rotation.y = 0.0
 	player.camera.rotation.x = 0.0
 	player.velocity = Vector3.ZERO
+	if not to_city:
+		_check_pending()
+	elif estep and game.estep.home:
+		game.estep.home = false
+		_park_step_at_home()
 
 
 func _fade_travel(to_city: bool, text: String) -> void:
@@ -521,6 +573,7 @@ func close_loopr() -> void:
 func toggle_phone() -> void:
 	phone.visible = not phone.visible
 	if phone.visible:
+		phone.go_home()
 		phone.refresh(game, session)
 	_set_ui_mode(phone.visible)
 
@@ -529,6 +582,8 @@ func toggle_phone() -> void:
 
 func go_to_sleep() -> void:
 	sequencer.stop()
+	if in_city:
+		_leave_city()
 	var night := game.sleep()
 	results.show_night(night)
 	_set_ui_mode(true)
@@ -550,14 +605,310 @@ func _on_pc_crash() -> void:
 # ---------- Session flow ----------
 
 func _on_book(r: Dictionary) -> void:
+	if not session.can_book(r) or not game.pending.is_empty():
+		return
+	game.message(str(r.name), "studio's open tonight. pull up to Kade 17", true)
+	if in_city:
+		_set_pending(r, false)
+		return
+	session.book(r)
+	if phone.visible:
+		toggle_phone()
+	show_toast("%s is on the way up. Cook a beat in LOOPR while you wait." % r.name)
+
+
+## Invited/answered while you were out: they head to your place, you have 40 minutes to get home.
+func _set_pending(r: Dictionary, hot: bool) -> void:
+	game.pending = {"rapper": r.id, "until": game.minutes + 40, "hot": hot}
+	game.message(str(r.name), "omw. be at ur door at %s. dont make me wait outside" % game.clock_text_at(game.minutes + 40))
+	show_toast("%s is coming to your studio. Be home before %s!" % [r.name, game.clock_text_at(game.minutes + 40)])
+
+
+func _check_pending() -> void:
+	if game.pending.is_empty():
+		return
+	var r := Rappers.by_id(str(game.pending.rapper))
+	if not in_city and not session.is_active():
+		var hot: bool = game.pending.get("hot", false)
+		game.pending = {}
+		session.book(r)
+		session.hot = hot
+		show_toast("%s is right on time. Session on%s." % [r.name, "  (hot session: +15% pay)" if hot else ""])
+	elif game.minutes > int(game.pending.until):
+		game.pending = {}
+		game.booked_today.append(r.id)
+		game.add(0, -1, 0)
+		game.message(str(r.name), "waited outside ur door for nothing. not cool.")
+		show_toast("%s gave up waiting.  −1 REP" % r.name)
+
+
+# ---------- Calls ----------
+
+func _maybe_call(force := false) -> void:
+	if in_menu or session.is_active() or not game.pending.is_empty() or call_ui.ringing or results.visible:
+		return
+	var m := game.minutes
+	if not force and (game.calls_tonight >= 2 or m < 22 * 60 + 15 or m > 26 * 60 + 30 or randf() > 0.025):
+		return
+	var pool: Array = Rappers.all().filter(func(r): return session.can_book(r))
+	if pool.is_empty():
+		return
+	call_ui.ring(pool[randi() % pool.size()])
+
+
+func _on_call_answered(r: Dictionary) -> void:
+	game.calls_tonight += 1
+	game.log_call(str(r.name), "answered")
 	if not session.can_book(r):
 		return
 	if in_city:
-		show_toast("Go home first. %s won't wait on the street." % r.name)
+		_set_pending(r, true)
+	else:
+		session.book(r)
+		session.hot = true
+		show_toast("%s: \"I'm downstairs. Let's cook.\"   Hot session: +15%% pay" % r.name)
+
+
+func _on_call_declined(r: Dictionary) -> void:
+	game.calls_tonight += 1
+	game.log_call(str(r.name), "declined")
+	game.message(str(r.name), "ok. ur loss")
+
+
+func _on_call_missed(r: Dictionary) -> void:
+	game.calls_tonight += 1
+	game.log_call(str(r.name), "missed")
+	game.message(str(r.name), "called u. u dont pick up?? hit me if ur free")
+
+
+func _on_notified(from: String, text: String) -> void:
+	if in_menu:
 		return
-	session.book(r)
-	toggle_phone()
-	show_toast("%s is on the way up. Cook a beat in LOOPR while you wait." % r.name)
+	_banner_from.text = "MESSAGE  ·  " + from
+	_banner_text.text = text.substr(0, 70) + ("…" if text.length() > 70 else "")
+	_banner_t = 4.5
+	_play_sfx(AmbienceSynth.ping())
+	if phone.visible:
+		phone._render()
+
+
+func _play_sfx(stream: AudioStream) -> void:
+	_sfx.stream = stream
+	_sfx.play()
+
+
+# ---------- E-step ----------
+
+func _spawn_step() -> void:
+	if not game.estep.owned or estep != null:
+		return
+	estep = EStep.new()
+	estep.data = game.estep
+	estep.build()
+	city.add_child(estep)
+	var pos = game.estep.get("pos", null)
+	if game.estep.home or not (pos is Array):
+		_park_step_at_home()
+	else:
+		estep.position = Vector3(pos[0], 0.0, pos[1])
+		estep.rotation.y = float(pos[2])
+
+
+func _home_door_local() -> Vector3:
+	return city._shop_reg("home").get("door_out", city.spawn_local)
+
+
+func _park_step_at_home() -> void:
+	if estep == null:
+		return
+	estep.position = _home_door_local() + Vector3(1.6, -0.05, -0.4)
+	estep.rotation.y = PI * 0.5
+	estep.update_label()
+
+
+## Leaving the street (home or sleep): get off the step; parked near your door = taken upstairs to charge.
+func _leave_city() -> void:
+	if player.riding:
+		player.dismount()
+	if estep:
+		var near := estep.position.distance_to(_home_door_local()) < 14.0
+		game.estep.home = near
+		game.estep.pos = [estep.position.x, estep.position.z, estep.rotation.y]
+	if not zoef.is_empty():
+		_zoef_clear()
+		show_toast("Order cancelled. The kapsalon went cold.")
+
+
+func _on_step_bought(id: String) -> void:
+	if id == "estep":
+		_spawn_step()
+		show_toast("Bought! Your e-step is parked by the front door of Kade 17.")
+	else:
+		show_toast("E-step upgraded: %s" % ("Motor tune (31 km/h)" if id == "step_motor" else "Big battery (2× range)"))
+
+
+func _step_update() -> void:
+	if player.riding == null:
+		return
+	var b := float(game.estep.battery)
+	if b <= 20.0 and not _batt_warned:
+		_batt_warned = true
+		show_toast("E-step battery low (%d%%). Park it by your door to charge overnight." % int(b))
+	if b <= 0.0 and _batt_warned:
+		_batt_warned = false
+		game.estep.battery = 0.0
+		show_toast("Battery dead. Kick-push it home...")
+	if b > 25.0:
+		_batt_warned = false
+
+
+func _on_crash(speed: float, collider: Object) -> void:
+	if collider and collider.has_meta("npc"):
+		var n: NPC = collider.get_meta("npc")
+		n.memory.annoyed = int(n.memory.annoyed) + 2
+		n.face(player.global_position)
+		n.react("hit", StreetTalk._pick(["AU! Are you crazy?!", "Watch where you're riding!", "Sidewalk is for WALKING!"]), 2.5)
+		game.add(0, -1, 0)
+		show_toast("You crashed into %s.  −1 REP" % n.display_name)
+	else:
+		show_toast("You ate pavement at %d km/h. Ouch." % int(round(speed * 3.6)))
+
+
+# ---------- Zoef (delivery side job) ----------
+
+const ZOEF_FOOD := ["kapsalon", "2x frikandel speciaal", "döner box", "bami schijf + fries", "pizza margherita", "loempia + sate", "broodje kroket"]
+
+
+func _on_zoef(action: String) -> void:
+	if action == "cancel":
+		_zoef_clear()
+		show_toast("Order cancelled.")
+		return
+	if not in_city or not zoef.is_empty():
+		return
+	var pick: Vector3 = city._shop_reg("snackbar").get("door_out", Vector3.ZERO)
+	var side := -1 if randf() < 0.5 else 1
+	var x := 0.0
+	for i in 20:
+		x = snappedf(randf_range(-62.0, 62.0), 1.0)
+		if absf(x - pick.x) > 14.0:
+			break
+	var drop := Vector3(x, 0.05, side * (CityBuilder.LINE - 0.8))
+	var d1 := city.to_local(player.global_position).distance_to(pick)
+	var d2 := pick.distance_to(drop)
+	var limit := int((d1 + d2) / 3.0) + 15
+	zoef = {
+		"food": ZOEF_FOOD[randi() % ZOEF_FOOD.size()],
+		"address": "%s %d" % ["Zuidkade" if side < 0 else "Maasstraat", int(absf(x + 70.0) / 3.0) + 1],
+		"pick": pick, "drop": drop, "picked": false,
+		"until": game.minutes + limit, "limit": limit,
+		"pay": clampi(int(5.0 + d2 * 0.07), 6, 14),
+	}
+	_zoef_place_marker(pick, "PICK UP\n" + str(zoef.food), UIKit.GOLD)
+	if phone.visible:
+		toggle_phone()
+	show_toast("Zoef: pick up %s at Snackbar De Hoek. %d min." % [zoef.food, limit])
+
+
+func _zoef_place_marker(local: Vector3, text: String, col: Color) -> void:
+	if _zoef_marker:
+		_zoef_marker.queue_free()
+	var m := Node3D.new()
+	m.name = "ZoefMarker"
+	m.position = Vector3(local.x, 0, local.z)
+	var beam := MeshInstance3D.new()
+	var cylm := CylinderMesh.new()
+	cylm.top_radius = 0.35
+	cylm.bottom_radius = 0.35
+	cylm.height = 30.0
+	beam.mesh = cylm
+	var bm := StandardMaterial3D.new()
+	bm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	bm.albedo_color = Color(col, 0.28)
+	bm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	beam.material_override = bm
+	beam.position.y = 15.0
+	beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	m.add_child(beam)
+	var ring := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 1.1
+	tm.outer_radius = 1.3
+	ring.mesh = tm
+	var rm := StandardMaterial3D.new()
+	rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rm.albedo_color = col
+	ring.material_override = rm
+	ring.position.y = 0.08
+	m.add_child(ring)
+	var lbl := Label3D.new()
+	lbl.text = text
+	lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lbl.no_depth_test = true
+	lbl.fixed_size = true
+	lbl.pixel_size = 0.0012
+	lbl.font_size = 28
+	lbl.outline_size = 8
+	lbl.modulate = col
+	lbl.position.y = 2.6
+	m.add_child(lbl)
+	city.add_child(m)
+	_zoef_marker = m
+
+
+func _zoef_clear() -> void:
+	zoef = {}
+	if _zoef_marker:
+		_zoef_marker.queue_free()
+		_zoef_marker = null
+
+
+func _zoef_update() -> void:
+	if zoef.is_empty():
+		return
+	var here := city.to_local(player.global_position)
+	here.y = 0.0
+	if not zoef.picked:
+		var p: Vector3 = zoef.pick
+		if here.distance_to(Vector3(p.x, 0, p.z)) < 2.6:
+			zoef.picked = true
+			_zoef_place_marker(zoef.drop, "DELIVER\n" + str(zoef.address), UIKit.CYAN)
+			_play_fx_ping()
+			show_toast("Picked up %s. Deliver to %s." % [zoef.food, zoef.address])
+		return
+	var d: Vector3 = zoef.drop
+	if here.distance_to(Vector3(d.x, 0, d.z)) < 2.6:
+		complete_delivery()
+
+
+## Pay out: full pay on time (half when late), tip for speed, +30% tips in the rain.
+func complete_delivery() -> Dictionary:
+	var left := int(zoef.until) - game.minutes
+	var pay := int(zoef.pay) if left >= 0 else int(zoef.pay) / 2
+	var tip := randi() % 3
+	if left > int(zoef.limit) * 0.4:
+		tip += 2
+	if game.weather == "rain":
+		tip = int(ceil(tip * 1.3))
+	game.deliveries += 1
+	game.add(pay + tip, 0, 0)
+	_play_sfx(AmbienceSynth.cash())
+	show_toast("Delivered! €%d%s%s" % [pay, "  +€%d tip" % tip if tip > 0 else "", "  (late: half pay)" if left < 0 else ""])
+	var res := {"pay": pay, "tip": tip, "late": left < 0}
+	_zoef_clear()
+	return res
+
+
+func _play_fx_ping() -> void:
+	_play_sfx(AmbienceSynth.ping())
+
+
+func _toggle_quality() -> void:
+	city.apply_quality(not city.quality_high)
+	room.room_env.ssil_enabled = city.quality_high
+	room.room_env.volumetric_fog_enabled = city.quality_high
+	show_toast("Graphics: %s" % ("HIGH" if city.quality_high else "LOW (faster)"))
 
 
 func _on_session_state(st: int) -> void:
@@ -754,6 +1105,20 @@ func _build_hud() -> void:
 	prompt.visible = false
 	hud.add_child(prompt)
 
+	_banner = PanelContainer.new()
+	_banner.add_theme_stylebox_override("panel", UIKit.box(Color(0.08, 0.07, 0.12, 0.94), 18, Color("2fbf71"), 1, 12))
+	var bcol := VBoxContainer.new()
+	_banner.add_child(bcol)
+	_banner_from = UIKit.label("", 13, Color("2fbf71"))
+	bcol.add_child(_banner_from)
+	_banner_text = UIKit.label("", 16, UIKit.TEXT)
+	bcol.add_child(_banner_text)
+	_banner.modulate.a = 0.0
+	_banner.custom_minimum_size = Vector2(420, 0)
+	_sfx = AudioStreamPlayer.new()
+	_sfx.volume_db = -6.0
+	add_child(_sfx)
+
 	toast_label = UIKit.label("", 19, UIKit.TEXT)
 	toast_label.add_theme_color_override("font_outline_color", Color(0.03, 0.02, 0.07))
 	toast_label.add_theme_constant_override("outline_size", 8)
@@ -762,3 +1127,4 @@ func _build_hud() -> void:
 	tl.layer = 30
 	add_child(tl)
 	tl.add_child(toast_label)
+	tl.add_child(_banner)

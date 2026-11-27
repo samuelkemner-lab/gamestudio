@@ -80,6 +80,11 @@ func build() -> void:
 var led_lights: Array[Light3D] = []
 var led_mats: Array[StandardMaterial3D] = []
 var lights_on := true
+var furniture_root: Node3D
+var _default_rug: Node3D
+var _boxes: Array[Node3D] = []
+var _default_lamp: Node3D
+var _led_panel_mat: StandardMaterial3D
 var _sweep: SpotLight3D
 var _sweep_t := 6.0
 
@@ -132,6 +137,9 @@ func _process_sweep(delta: float) -> void:
 
 func _process(delta: float) -> void:
 	_process_sweep(delta)
+	if _led_panel_mat and is_instance_valid(_led_panel_mat):
+		var h := fmod(Time.get_ticks_msec() / 18000.0, 1.0)
+		_led_panel_mat.emission = Color.from_hsv(h, 0.75, 1.0)
 	if fan:
 		fan.rotate_y(delta * 2.2)
 
@@ -411,7 +419,7 @@ func _shell() -> void:
 		part(shell, box(spec[0]), spec[1], lm)
 
 	# Rug + ceiling fan
-	kit(shell, "rugRounded", Vector3(0.05, 0, 0.35), 90, 1.8, {
+	_default_rug = kit(shell, "rugRounded", Vector3(0.05, 0, 0.35), 90, 1.8, {
 		"carpet": mat(PAL.rug, 1.0, "fabric", 6.0),
 		"carpetDarker": mat(Color("5a2a55"), 1.0, "fabric", 6.0),
 	})
@@ -780,13 +788,14 @@ func _front_wall() -> void:
 	var cb := {"wood": mat(PAL.cardboard, 0.9, "fabric", 3.0), "woodDark": mat(PAL.cardboard.darkened(0.25), 0.9, "fabric", 3.0)}
 	var b1 := kit(f, "cardboardBoxClosed", Vector3(0.45, 0, 2.3), 8, S, cb)
 	var b1h: float = (b1.get_meta("size") as Vector3).y
-	kit(f, "cardboardBoxClosed", Vector3(0.48, b1h, 2.3), -6, 1.7, cb)
-	kit(f, "cardboardBoxOpen", Vector3(1.0, 0, 2.25), -15, S, cb)
-	text3d(f, "MERCH", Vector3(0.44, b1h * 0.55, 2.085), Color("1a1a22"), 0.0012, Vector3(0, 8, 0), 0.0)
+	_boxes.append(b1)
+	_boxes.append(kit(f, "cardboardBoxClosed", Vector3(0.48, b1h, 2.3), -6, 1.7, cb))
+	_boxes.append(kit(f, "cardboardBoxOpen", Vector3(1.0, 0, 2.25), -15, S, cb))
+	_boxes.append(text3d(f, "MERCH", Vector3(0.44, b1h * 0.55, 2.085), Color("1a1a22"), 0.0012, Vector3(0, 8, 0), 0.0))
 	solid(Vector3(1.2, 1.0, 0.5), Vector3(0.7, 0.5, 2.3))
 
 	# Floor lamp in the corner (warm)
-	kit(f, "lampRoundFloor", Vector3(-1.9, 0, 2.35), 0, S, {"metal": mat(PAL.metal, 0.35, "")})
+	_default_lamp = kit(f, "lampRoundFloor", Vector3(-1.9, 0, 2.35), 0, S, {"metal": mat(PAL.metal, 0.35, "")})
 
 
 # ================= Floor clutter =================
@@ -882,6 +891,95 @@ func _upgrade_props() -> void:
 func apply_upgrades(owned: Array) -> void:
 	for id in upgrade_nodes.keys():
 		(upgrade_nodes[id] as Node3D).visible = id in owned
+
+
+# ================= Furniture (Huisraad) =================
+
+## Rebuild the placed furniture. Defaults (rug, moving boxes, floor lamp) hide when a slot is used.
+func apply_furniture(placed: Dictionary) -> void:
+	if furniture_root == null:
+		furniture_root = Node3D.new()
+		furniture_root.name = "Furniture"
+		add_child(furniture_root)
+	for c in furniture_root.get_children():
+		c.queue_free()
+	if _default_rug:
+		_default_rug.visible = not placed.has("rug")
+	for b in _boxes:
+		b.visible = not placed.has("front")
+	if _default_lamp:
+		_default_lamp.visible = not placed.has("lamp")
+	for slot in placed:
+		var n := Node3D.new()
+		n.name = str(placed[slot])
+		furniture_root.add_child(n)
+		_build_furniture(n, str(placed[slot]))
+
+
+func _build_furniture(g: Node3D, id: String) -> void:
+	var wood := {"wood": mat(PAL.wood_dark, 0.6, "wood", 1.0), "woodDark": mat(PAL.wood_dark.darkened(0.3), 0.6, "wood", 1.0)}
+	match id:
+		"beanbag":
+			part(g, sphere(0.42, 0.5), Vector3(-1.55, 0.22, -0.55), mat(Color("6b2a3a"), 1.0, "fabric", 5.0), Vector3.ZERO, Vector3(1.0, 0.7, 1.0))
+			part(g, sphere(0.25, 0.3), Vector3(-1.72, 0.42, -0.55), mat(Color("6b2a3a"), 1.0, "fabric", 5.0), Vector3.ZERO, Vector3(0.7, 1.0, 1.2))
+		"lounge_chair":
+			kit(g, "loungeChair", Vector3(-1.6, 0, -0.55), 90, 1.8, {"carpet": mat(Color("3d5a4a"), 1.0, "fabric", 5.0), "wood": mat(PAL.wood_dark, 0.6, "wood")})
+		"sofa":
+			kit(g, "loungeSofa", Vector3(-1.62, 0, -0.6), 90, Vector3(1.6, 1.7, 1.7), {"carpet": mat(Color("2f2a3e"), 1.0, "fabric", 5.0), "carpetDarker": mat(Color("221e2e"), 1.0, "fabric", 5.0)})
+		"rug_round":
+			kit(g, "rugRound", Vector3(0.0, 0.004, 0.2), 0, 2.2, {"carpet": mat(Color("d8d0c0"), 1.0, "fabric", 8.0), "carpetDarker": mat(Color("b8ae9c"), 1.0, "fabric", 8.0)})
+		"rug_persian":
+			kit(g, "rugRectangle", Vector3(0.0, 0.004, 0.25), 90, 2.0, {"carpet": mat(Color("7a1f24"), 1.0, "fabric", 6.0), "carpetDarker": mat(Color("2a2a5a"), 1.0, "fabric", 6.0), "carpetWhite": mat(Color("d6b46a"), 1.0, "fabric", 6.0)})
+		"coffee_table":
+			kit(g, "tableCoffeeSquare", Vector3(-0.75, 0, -0.45), 0, 1.5, wood)
+			kit(g, "plantSmall2", Vector3(-0.68, 0.3, -0.4), 0, 1.4)
+		"glass_table":
+			kit(g, "tableCoffeeGlass", Vector3(-0.75, 0, -0.45), 90, 1.6, {"glass": mat(Color(0.6, 0.7, 0.8), 0.05, ""), "metal": mat(PAL.metal, 0.3, "")})
+		"mini_fridge":
+			kit(g, "kitchenFridgeSmall", Vector3(0.75, 0, 2.25), 180, S, {"metal": mat(Color("d9dde3"), 0.3, ""), "metalMedium": mat(Color("aeb4bd"), 0.3, "")})
+			part(g, box(Vector3(0.02, 0.02, 0.02)), Vector3(0.95, 0.75, 2.03), glow(Color("3dff8a"), 6.0))
+		"vinyl_shelf":
+			kit(g, "bookcaseOpenLow", Vector3(0.7, 0, 2.3), 180, S, wood)
+			var cols := [Color("1a1a22"), PAL.pop, Color("e8c547"), Color("2a2a3a"), PAL.neon_cyan, Color("d65a2c"), Color("1a1a22"), PAL.neon_purple]
+			for i in 16:
+				part(g, box(Vector3(0.012, 0.3, 0.3)), Vector3(0.25 + i * 0.055, 0.2 + (i / 8) * 0.38, 2.3), mat(cols[i % cols.size()], 0.6, ""))
+		"tv_console":
+			kit(g, "cabinetTelevision", Vector3(0.7, 0, 2.3), 180, S, wood)
+			kit(g, "televisionModern", Vector3(0.7, 0.55, 2.32), 180, S, {"metalDark": mat(Color("0c0c10"), 0.3, "")})
+			part(g, box(Vector3(0.78, 0.42, 0.01)), Vector3(0.7, 0.86, 2.27), glow(Color("1d3f8a"), 0.45))
+			var tl := OmniLight3D.new()
+			tl.position = Vector3(0.7, 0.9, 2.0)
+			tl.light_color = Color("5a8aff")
+			tl.light_energy = 0.5
+			tl.omni_range = 2.2
+			g.add_child(tl)
+		"poster":
+			part(g, box(Vector3(0.015, 0.62, 0.86)), Vector3(-2.085, 1.62, -0.95), mat(Color("0c0a12"), 0.5, ""))
+			part(g, box(Vector3(0.01, 0.56, 0.8)), Vector3(-2.075, 1.62, -0.95), mat(Color("1b2a4a"), 0.9, ""))
+			part(g, box(Vector3(0.012, 0.3, 0.02)), Vector3(-2.07, 1.56, -0.98), glow(Color("e8ecff"), 1.5), Vector3(-12, 0, 0))
+			part(g, box(Vector3(0.012, 0.02, 0.6)), Vector3(-2.07, 1.45, -0.95), glow(Color("ffb46a"), 1.2))
+		"led_panel":
+			_led_panel_mat = glow(Color("ff3dd0"), 0.7)
+			part(g, box(Vector3(0.03, 0.7, 1.1)), Vector3(-2.08, 1.62, -0.95), mat(Color("08080c"), 0.5, ""))
+			for i in 5:
+				part(g, box(Vector3(0.012, 0.56, 0.16)), Vector3(-2.06, 1.62, -1.37 + i * 0.21), _led_panel_mat)
+		"diffuser":
+			part(g, box(Vector3(0.03, 0.8, 0.8)), Vector3(-2.08, 1.6, -0.95), mat(PAL.wood_dark, 0.7, "wood"))
+			var rng := RandomNumberGenerator.new()
+			rng.seed = 17
+			for yy in 7:
+				for zz in 7:
+					var d := rng.randf_range(0.02, 0.12)
+					part(g, box(Vector3(d, 0.1, 0.1)), Vector3(-2.06 + d / 2.0, 1.27 + yy * 0.11, -1.28 + zz * 0.11), mat(Color("b08a5a").darkened(rng.randf_range(0.0, 0.35)), 0.8, "wood"))
+		"lamp_warm":
+			kit(g, "lampSquareFloor", Vector3(-1.85, 0, 2.3), 0, S, {"metal": mat(PAL.metal, 0.35, ""), "lamp": glow(Color("ffb35c"), 0.35)})
+			var l := OmniLight3D.new()
+			l.position = Vector3(-1.8, 1.5, 2.2)
+			l.light_color = Color("ffb870")
+			l.light_energy = 1.1
+			l.omni_range = 3.5
+			l.shadow_enabled = true
+			g.add_child(l)
 
 
 # ================= Atmosphere =================

@@ -7,6 +7,7 @@ extends CharacterBody3D
 signal interacted(target: Object)
 signal interact_empty  # E pressed while looking at nothing (e.g. lying in bed → sleep)
 signal thrown(body: RigidBody3D)
+signal crashed(speed: float, collider: Object)  # fell off the e-step
 
 enum Posture { STAND, CROUCH, PRONE }
 
@@ -28,6 +29,8 @@ var sprinting := false
 var surface := "wood"  # "wood" | "stone" | "wet" (set by main)
 var pose := ""  # "" free, "seat", "bed"
 var held: RigidBody3D
+var riding: EStep  # on the e-step
+var _crash_roll := 0.0
 var flashlight: SpotLight3D
 
 var _bob_t := 0.0
@@ -137,6 +140,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventKey and event.pressed and not event.echo:
 		match event.physical_keycode:
 			KEY_E:
+				if riding:
+					dismount()
+					return
 				if held:
 					drop_held()
 					return
@@ -148,17 +154,22 @@ func _unhandled_input(event: InputEvent) -> void:
 				else:
 					interact_empty.emit()
 			KEY_C:
-				if pose == "":
+				if pose == "" and not riding:
 					_crouch_toggle = not _crouch_toggle
 					if _crouch_toggle and posture == Posture.STAND:
 						set_posture(Posture.CROUCH)
 					elif not _crouch_toggle and posture == Posture.CROUCH:
 						set_posture(Posture.STAND)
 			KEY_Z:
-				if pose == "" and not event.ctrl_pressed:
+				if pose == "" and not riding and not event.ctrl_pressed:
 					set_posture(Posture.STAND if posture == Posture.PRONE else Posture.PRONE)
+			KEY_B:
+				if riding:
+					riding.ring_bell()
 			KEY_SPACE:
-				if pose != "":
+				if riding:
+					dismount()
+				elif pose != "":
 					leave_pose()
 				elif posture == Posture.PRONE:
 					set_posture(Posture.CROUCH)
@@ -277,6 +288,11 @@ func _physics_process(delta: float) -> void:
 		camera.position = camera.position.lerp(Vector3(0, _pose_cam_h, 0), 10.0 * delta)
 		_vignette.modulate.a = lerpf(_vignette.modulate.a, 0.0, 6.0 * delta)
 		return
+	if riding:
+		_ride(delta)
+		return
+	_crash_roll = lerpf(_crash_roll, 0.0, 3.0 * delta)
+	camera.rotation.z = lerpf(camera.rotation.z, _crash_roll, 8.0 * delta)
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
 		_fall_speed = maxf(_fall_speed, -velocity.y)
@@ -330,6 +346,85 @@ func _physics_process(delta: float) -> void:
 	camera.fov = lerpf(camera.fov, 82.0 if sprinting and moving else 75.0, 6.0 * delta)
 	var vig := 0.0 if posture == Posture.STAND else (0.75 if posture == Posture.CROUCH else 1.0)
 	_vignette.modulate.a = lerpf(_vignette.modulate.a, vig, 6.0 * delta)
+
+
+# ---------- E-step ----------
+
+func mount(step: EStep) -> void:
+	if held:
+		drop_held()
+	set_posture(Posture.STAND)
+	_crouch_toggle = false
+	riding = step
+	global_position = step.global_position + Vector3(0, 0.05, 0)
+	rotation.y = step.rotation.y
+	velocity = Vector3.ZERO
+	step.mount(self)
+
+
+func dismount() -> void:
+	if riding == null:
+		return
+	var step := riding
+	riding = null
+	step.global_position = Vector3(global_position.x, global_position.y - 0.05, global_position.z)
+	step.rotation.y = rotation.y
+	step.dismount()
+	# step off to the left
+	var side := -transform.basis.x * 0.75
+	global_position += side
+	velocity = Vector3.ZERO
+
+
+## W gas, S brake, A/D (and the mouse) steer. Hit a wall or a person too fast and you fall off.
+func _ride(delta: float) -> void:
+	var top := riding.max_speed()
+	var thr := 0.0
+	var steer := 0.0
+	if enabled:
+		thr = float(Input.is_physical_key_pressed(KEY_W)) - float(Input.is_physical_key_pressed(KEY_S))
+		steer = float(Input.is_physical_key_pressed(KEY_A)) - float(Input.is_physical_key_pressed(KEY_D))
+	var sp := riding.speed
+	if thr > 0.0:
+		sp = move_toward(sp, top, 2.6 * delta)
+	elif thr < 0.0:
+		sp = move_toward(sp, 0.0, 7.0 * delta)
+	else:
+		sp = move_toward(sp, 0.0, 0.8 * delta)
+	if sp > top:
+		sp = move_toward(sp, top, 3.0 * delta)
+	var k := clampf(sp / maxf(top, 0.1), 0.0, 1.0)
+	rotate_y(steer * delta * lerpf(1.9, 1.15, k) * (1.0 if sp > 0.3 else 0.35))
+	var fwd := -transform.basis.z
+	velocity.x = fwd.x * sp
+	velocity.z = fwd.z * sp
+	if not is_on_floor():
+		velocity.y -= GRAVITY * delta
+	move_and_slide()
+	riding.speed = sp
+	for i in get_slide_collision_count():
+		var c := get_slide_collision(i)
+		if absf(c.get_normal().y) < 0.5:
+			if sp > 3.8:
+				crash(c.get_collider())
+				return
+			riding.speed = sp * 0.4  # scrape along the wall
+			break
+	# camera: standing on the deck, lean into turns, FOV opens with speed
+	camera.position = camera.position.lerp(Vector3(0, 1.74 + sin(Time.get_ticks_msec() * 0.03) * 0.004 * k, 0), 10.0 * delta)
+	camera.rotation.z = lerpf(camera.rotation.z, steer * 0.07 * k, 5.0 * delta)
+	camera.fov = lerpf(camera.fov, 75.0 + sp * 1.4, 4.0 * delta)
+	_vignette.modulate.a = lerpf(_vignette.modulate.a, 0.0, 6.0 * delta)
+
+
+func crash(collider: Object) -> void:
+	var sp := riding.speed if riding else 0.0
+	dismount()
+	_crash_roll = 0.55
+	_land_dip = 0.35
+	camera.rotation.z = 0.55
+	_play_fx(AmbienceSynth.land())
+	crashed.emit(sp, collider)
 
 
 func _footstep() -> void:

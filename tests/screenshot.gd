@@ -78,9 +78,29 @@ func _run() -> void:
 			n.queue_free()
 
 	if want.call("phone"):
+		main.call_ui.ring(Rappers.LIL_TEAR)
 		main.toggle_phone()
 		await _save(out + "/shot_phone.png")
+		main.call_ui.decline()
+		main.phone.open_thread("Lil Tear")
+		await _save(out + "/shot_phone_chat.png")
+		main.phone.open_app("huisraad")
+		await _save(out + "/shot_phone_huisraad.png")
+		main.phone.open_app("ruilmarkt")
+		await _save(out + "/shot_phone_ruilmarkt.png")
 		main.toggle_phone()
+
+	if want.call("furnished"):
+		main.game.money = 2000
+		for id in ["sofa", "rug_persian", "glass_table", "tv_console", "led_panel", "lamp_warm"]:
+			main.game.buy_furniture(id)
+		main.room.apply_furniture(main.game.placed)
+		main.player.position = Vector3(1.1, 0.05, -1.5)
+		main.player.rotation.y = deg_to_rad(128.0)
+		main.player.camera.rotation.x = deg_to_rad(-12.0)
+		for i in 20:
+			await process_frame
+		await _save(out + "/shot_furnished.png")
 
 	if want.call("session"):
 		main.session.book(Rappers.BIG_EARL)
@@ -150,8 +170,7 @@ func _run() -> void:
 	if want.call("shop"):
 		main.game.money = 400
 		main.toggle_phone()
-		main.phone.tab = "shop"
-		main.phone._render()
+		main.phone.open_app("gear")
 		await _save(out + "/shot_shop.png")
 		main.toggle_phone()
 
@@ -185,8 +204,28 @@ func _run() -> void:
 		if str(n).begins_with("city_"):
 			city_views.append(str(n))
 	if want.call("city") or city_views.size() > 0:
+		if "city_step" in city_views:
+			main.game.estep.owned = true
+			main._spawn_step()
 		main.travel(true)
 		var c: CityBuilder = main.city
+		if "city_step" in city_views:
+			var sp: Vector3 = main.estep.position
+			main.player.global_position = c.to_global(sp + Vector3(-1.6, 0.05, 2.6))
+			main.player.look_at(c.to_global(sp + Vector3(0, 1.0, 0)), Vector3.UP)
+			main.player.rotation.x = 0.0
+			main.player.camera.rotation.x = deg_to_rad(-18.0)
+			for i in 40:
+				await process_frame
+			await _save(out + "/shot_city_step.png")
+			main.player.mount(main.estep)
+			main.player.global_position = c.to_global(Vector3(-30, 0.05, -1.7))
+			main.player.rotation.y = deg_to_rad(-90.0)
+			main.estep.speed = 6.0
+			for i in 40:
+				await process_frame
+			await _save(out + "/shot_city_ride.png")
+			main.player.dismount()
 		# [name, local pos, yaw deg, pitch deg]
 		for v in [
 			["city_home", Vector3(-42, 0.05, -6.5), 180.0, -2.0],

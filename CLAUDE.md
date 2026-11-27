@@ -22,6 +22,9 @@ Volledig design: Claude Doc "Game Design Document – Studio Producer Sim".
 ## Art direction
 Lees **docs/ART_DIRECTION.md** (de masterprompt) vóór elke visuele taak en toets elke screenshot aan de checklist daarin.
 
+## LOOPR (de DAW)
+Lees **docs/LOOPR_DAW_MASTERPROMPT.md** vóór elke taak aan LOOPR. Richting: BandLab-achtige werking (sporen, regions op een tijdlijn, editors in een dock), met eigen LOOPR-identiteit. Geen BandLab-namen, -logo of pixelkopie. Bouw volgens de fases F1–F6 daarin.
+
 ## Regels
 - Geen FL Studio-naam, -logo of -interface kopiëren. De DAW heet LOOPR en heeft een eigen look.
 - Alleen eigen of commercieel gelicenseerde audio. Placeholder-drums worden in code gegenereerd (`scripts/drum_synth.gd`).

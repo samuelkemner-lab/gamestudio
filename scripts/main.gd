@@ -1,20 +1,30 @@
 extends Node3D
-## Studio Grind – prototype v0.3
-## Title screen, bedroom studio (docs/ART_DIRECTION.md), first-person player, LOOPR at the desk.
+## Studio Grind – prototype v0.4
+## Title screen → bedroom studio → phone DMs → rapper session in the booth → rating & payout.
 
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
-const VERSION := "v0.3 prototype"
+const VERSION := "v0.4 prototype"
+const BOOTH_LOOK := Vector3(1.45, 1.2, -1.6)
 
 var player  # player.gd (CharacterBody3D)
 var room: RoomBuilder
 var sequencer: Sequencer
+var game: GameState
+var session: Session
+var chaos: Chaos
 var loopr: LooprUI
 var screen_ui: LooprUI
+var phone: PhoneUI
+var results: ResultsUI
+
 var hud: CanvasLayer
 var crosshair: Label
 var prompt: PanelContainer
-var prompt_key: Label
 var prompt_text: Label
+var stats_label: Label
+var noise_bar: ProgressBar
+var toast_label: Label
+var _toast_time := 0.0
 
 var in_menu := false
 var menu_layer: CanvasLayer
@@ -29,9 +39,30 @@ func _ready() -> void:
 	add_child(room)
 	room.build()
 
+	game = GameState.new()
+	game.name = "GameState"
+	add_child(game)
+	if DisplayServer.get_name() == "headless":
+		game.persist = false
+	game.load_game()
+
 	sequencer = Sequencer.new()
 	sequencer.name = "Sequencer"
 	add_child(sequencer)
+
+	session = Session.new()
+	session.name = "Session"
+	add_child(session)
+	session.setup(self, sequencer, game)
+	session.finished.connect(_on_session_finished)
+	session.take_judged.connect(_on_take_judged)
+	session.state_changed.connect(_on_session_state)
+
+	chaos = Chaos.new()
+	chaos.name = "Chaos"
+	add_child(chaos)
+	chaos.setup(self, sequencer, game)
+	chaos.toast.connect(show_toast)
 
 	_build_monitor_screen()
 
@@ -50,7 +81,25 @@ func _ready() -> void:
 	loopr = LooprUI.new()
 	layer.add_child(loopr)
 	loopr.setup(sequencer)
+	loopr.bind_session(session)
+	loopr.record_pressed.connect(_on_record_pressed)
+	loopr.finish_pressed.connect(_on_finish_pressed)
 	loopr.visible = false
+
+	phone = PhoneUI.new()
+	layer.add_child(phone)
+	phone.build()
+	phone.visible = false
+	phone.book_requested.connect(_on_book)
+	phone.hints_toggled.connect(func(easy): session.easy_mode = easy; loopr.update_session())
+
+	results = ResultsUI.new()
+	layer.add_child(results)
+	results.visible = false
+	results.closed.connect(_on_results_closed)
+
+	game.changed.connect(_update_stats)
+	_update_stats()
 
 	if DisplayServer.get_name() != "headless":
 		show_menu()
@@ -67,6 +116,7 @@ func _build_monitor_screen() -> void:
 	screen_ui = LooprUI.new()
 	vp.add_child(screen_ui)
 	screen_ui.setup(sequencer)
+	screen_ui.bind_session(session)
 	room.screen_material.albedo_texture = vp.get_texture()
 
 
@@ -78,15 +128,31 @@ func _process(delta: float) -> void:
 	var vp := get_viewport().get_visible_rect().size
 	crosshair.position = Vector2(0, vp.y / 2.0 - 16)
 	crosshair.size = Vector2(vp.x, 32)
-	var target: Object = null if loopr.visible else player.hover_target()
+	var target: Object = null if _ui_open() else player.hover_target()
 	prompt.visible = target != null
 	if target:
-		prompt_text.text = str(target.get_meta("label"))
+		prompt_text.text = _prompt_for(target)
 		prompt.reset_size()
 		prompt.position = Vector2((vp.x - prompt.size.x) / 2.0, vp.y / 2.0 + 44)
-		crosshair.add_theme_color_override("font_color", Color("c4b5fd"))
-	else:
-		crosshair.add_theme_color_override("font_color", Color(1, 1, 1, 0.8))
+	noise_bar.value = game.noise
+	noise_bar.visible = game.noise > 1.0
+	var fill := noise_bar.get_theme_stylebox("fill") as StyleBoxFlat
+	if fill:
+		fill.bg_color = UIKit.CYAN.lerp(UIKit.POP, game.noise / 100.0)
+	if _toast_time > 0.0:
+		_toast_time -= delta
+		toast_label.modulate.a = clampf(_toast_time, 0.0, 1.0)
+		toast_label.position = Vector2((vp.x - toast_label.size.x) / 2.0, vp.y - 140)
+
+
+func _prompt_for(target: Object) -> String:
+	if target.get_meta("interact") == "mic" and session.npc and session.state in [Session.State.WAITING, Session.State.REVIEW]:
+		return "Talk to %s" % session.rapper.name
+	return str(target.get_meta("label"))
+
+
+func _ui_open() -> bool:
+	return loopr.visible or phone.visible or results.visible
 
 
 func _input(event: InputEvent) -> void:
@@ -97,34 +163,112 @@ func _input(event: InputEvent) -> void:
 		return
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
-	if event.physical_keycode == KEY_ESCAPE:
-		if loopr.visible:
-			close_loopr()
-		else:
-			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-		get_viewport().set_input_as_handled()
-	elif event.physical_keycode == KEY_SPACE and loopr.visible:
-		sequencer.toggle_play()
-		get_viewport().set_input_as_handled()
+	match event.physical_keycode:
+		KEY_ESCAPE:
+			if loopr.visible:
+				close_loopr()
+			elif phone.visible:
+				toggle_phone()
+			elif not results.visible:
+				Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+			get_viewport().set_input_as_handled()
+		KEY_SPACE:
+			if loopr.visible and session.state != Session.State.RECORDING:
+				sequencer.toggle_play()
+				get_viewport().set_input_as_handled()
+		KEY_TAB:
+			if not loopr.visible and not results.visible:
+				toggle_phone()
+				get_viewport().set_input_as_handled()
 
 
 func _on_interacted(target: Object) -> void:
-	if target.get_meta("interact") == "pc":
-		open_loopr()
+	match target.get_meta("interact"):
+		"pc":
+			open_loopr()
+		"mic":
+			if session.npc and session.state in [Session.State.WAITING, Session.State.REVIEW]:
+				session.npc.say(session.rapper.brief_pro.trim_prefix("\"").trim_suffix("\""), 5.0)
+			elif not session.is_active():
+				show_toast("Nobody's here. Check your phone for DMs  [TAB]")
+
+
+func _set_ui_mode(ui: bool) -> void:
+	player.enabled = not ui
+	hud.visible = not ui
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if ui else Input.MOUSE_MODE_CAPTURED
 
 
 func open_loopr() -> void:
 	loopr.visible = true
-	player.enabled = false
-	hud.visible = false
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	loopr.update_session()
+	_set_ui_mode(true)
 
 
 func close_loopr() -> void:
 	loopr.visible = false
-	player.enabled = true
-	hud.visible = true
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_set_ui_mode(false)
+
+
+func toggle_phone() -> void:
+	phone.visible = not phone.visible
+	if phone.visible:
+		phone.refresh(game, session)
+	_set_ui_mode(phone.visible)
+
+
+# ---------- Session flow ----------
+
+func _on_book(r: Dictionary) -> void:
+	if not session.can_book(r):
+		return
+	session.book(r)
+	toggle_phone()
+	show_toast("%s is on the way up. Cook a beat in LOOPR while you wait." % r.name)
+
+
+func _on_session_state(st: int) -> void:
+	if st == Session.State.WAITING:
+		show_toast("%s is in the booth. Open LOOPR, make the beat, hit RECORD TAKE." % session.rapper.name)
+
+
+func _on_record_pressed() -> void:
+	if session.record_take():
+		close_loopr()
+		player.look_at_point(BOOTH_LOOK)
+
+
+func _on_take_judged(r: Dictionary) -> void:
+	if session.state == Session.State.REVIEW:
+		show_toast("Take %d: %s   —  open LOOPR to FINISH or try a retake" % [session.takes_done, UIKit.stars(int(r.stars))])
+
+
+func _on_finish_pressed() -> void:
+	close_loopr()
+	session.finish()
+
+
+func _on_session_finished(summary: Dictionary) -> void:
+	await get_tree().create_timer(1.2).timeout
+	results.show_summary(summary)
+	_set_ui_mode(true)
+
+
+func _on_results_closed() -> void:
+	_set_ui_mode(false)
+	if game.street_cred >= 8 and not game.has_meta("ghost_unlocked"):
+		game.set_meta("ghost_unlocked", true)
+		show_toast("New DM unlocked: Ghost (drill) wants a session  [TAB]")
+
+
+func show_toast(text: String) -> void:
+	toast_label.text = text
+	toast_label.reset_size()
+	_toast_time = 5.0
+
+
+func _update_stats() -> void:
+	stats_label.text = "€ %d     REP %d     CRED %d" % [game.money, game.reputation, game.street_cred]
 
 
 # ---------- Title screen ----------
@@ -138,6 +282,7 @@ func show_menu() -> void:
 	add_child(menu_cam)
 	menu_cam.current = true
 	sequencer.play()
+	chaos.enabled = false
 
 	menu_layer = CanvasLayer.new()
 	menu_layer.layer = 20
@@ -146,7 +291,6 @@ func show_menu() -> void:
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	menu_layer.add_child(root)
 
-	# Left-side darkening so the title reads
 	var grad := Gradient.new()
 	grad.set_color(0, Color(0.03, 0.02, 0.07, 0.95))
 	grad.set_color(1, Color(0.03, 0.02, 0.07, 0.0))
@@ -166,42 +310,31 @@ func show_menu() -> void:
 	box.position = Vector2(90, 250)
 	box.add_theme_constant_override("separation", 6)
 	root.add_child(box)
-
-	var kicker := _menu_label("A BEDROOM PRODUCER STORY", 18, Color("25d9f5"))
-	box.add_child(kicker)
-	var title := _menu_label("STUDIO\nGRIND", 120, Color("f4efff"))
+	box.add_child(UIKit.label("A BEDROOM PRODUCER STORY", 18, UIKit.CYAN))
+	var title := UIKit.label("STUDIO\nGRIND", 120, UIKit.TEXT)
 	title.add_theme_constant_override("line_spacing", -38)
-	title.add_theme_color_override("font_outline_color", Color("b05cff"))
+	title.add_theme_color_override("font_outline_color", UIKit.ACCENT)
 	title.add_theme_constant_override("outline_size", 4)
 	title.add_theme_color_override("font_shadow_color", Color(0.69, 0.36, 1.0, 0.55))
 	title.add_theme_constant_override("shadow_offset_x", 0)
 	title.add_theme_constant_override("shadow_offset_y", 0)
 	title.add_theme_constant_override("shadow_outline_size", 28)
 	box.add_child(title)
-	box.add_child(_menu_label("from bedroom beats to the big stage", 22, Color("c4b5fd")))
+	box.add_child(UIKit.label("from bedroom beats to the big stage", 22, Color("c4b5fd")))
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(0, 60)
 	box.add_child(spacer)
-	_menu_press = _menu_label("PRESS ANY KEY", 22, Color("ffffff"))
+	_menu_press = UIKit.label("PRESS ANY KEY", 22, Color.WHITE)
 	box.add_child(_menu_press)
+	if game.sessions > 0:
+		box.add_child(UIKit.label("continue  ·  €%d  ·  %d tracks" % [game.money, game.sessions], 15, UIKit.DIM))
 
-	var ver := _menu_label(VERSION, 14, Color(1, 1, 1, 0.4))
-	ver.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	ver.position = Vector2(90, -50)
-	ver.offset_top = -50
+	var ver := UIKit.label(VERSION, 14, Color(1, 1, 1, 0.4))
+	ver.position = Vector2(90, 850)
 	root.add_child(ver)
 
 
-func _menu_label(text: String, size: int, color: Color) -> Label:
-	var l := Label.new()
-	l.text = text
-	l.add_theme_font_size_override("font_size", size)
-	l.add_theme_color_override("font_color", color)
-	return l
-
-
 func _update_menu(_delta: float) -> void:
-	# Slow cinematic drift across the room, looking at the desk
 	var a := _t * 0.12
 	menu_cam.position = Vector3(0.95 + sin(a) * 0.45, 1.55 + sin(a * 0.7) * 0.08, 1.75 + cos(a) * 0.2)
 	menu_cam.look_at(Vector3(-0.75, 1.05, -2.1), Vector3.UP)
@@ -213,12 +346,12 @@ func start_game() -> void:
 		return
 	in_menu = false
 	sequencer.stop()
+	chaos.enabled = true
 	menu_layer.queue_free()
 	menu_cam.queue_free()
 	player.camera.current = true
-	player.enabled = true
-	hud.visible = true
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_set_ui_mode(false)
+	show_toast("New DMs on your phone  [TAB]")
 
 
 # ---------- HUD ----------
@@ -227,64 +360,66 @@ func _build_hud() -> void:
 	hud = CanvasLayer.new()
 	add_child(hud)
 
-	var title := Label.new()
-	title.text = "STUDIO GRIND"
+	var title := UIKit.label("STUDIO GRIND", 20, Color("e9e4ff"))
 	title.position = Vector2(24, 16)
-	title.add_theme_font_size_override("font_size", 20)
-	title.add_theme_color_override("font_color", Color("e9e4ff"))
 	title.add_theme_color_override("font_outline_color", Color("1a1030"))
 	title.add_theme_constant_override("outline_size", 6)
 	hud.add_child(title)
-
-	var controls := Label.new()
-	controls.text = "WASD move  ·  E interact  ·  ESC free mouse"
+	var controls := UIKit.label("WASD move  ·  E interact  ·  TAB phone  ·  ESC mouse", 14, Color(0.85, 0.8, 1.0, 0.6))
 	controls.position = Vector2(24, 44)
-	controls.add_theme_font_size_override("font_size", 14)
-	controls.add_theme_color_override("font_color", Color(0.85, 0.8, 1.0, 0.6))
 	hud.add_child(controls)
 
-	crosshair = Label.new()
-	crosshair.text = "·"
+	# Stats (top right)
+	var stats_panel := PanelContainer.new()
+	stats_panel.add_theme_stylebox_override("panel", UIKit.box(Color(0.06, 0.04, 0.12, 0.75), 12, Color("3a2f5c"), 1, 14))
+	stats_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	stats_panel.offset_left = -360
+	stats_panel.offset_right = -24
+	stats_panel.offset_top = 16
+	hud.add_child(stats_panel)
+	var scol := VBoxContainer.new()
+	stats_panel.add_child(scol)
+	stats_label = UIKit.label("", 18, UIKit.TEXT)
+	stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	scol.add_child(stats_label)
+	noise_bar = ProgressBar.new()
+	noise_bar.max_value = 100
+	noise_bar.show_percentage = false
+	noise_bar.custom_minimum_size = Vector2(0, 8)
+	noise_bar.add_theme_stylebox_override("background", UIKit.box(Color(1, 1, 1, 0.08), 4, Color(), 0, 0))
+	noise_bar.add_theme_stylebox_override("fill", UIKit.box(UIKit.CYAN, 4, Color(), 0, 0))
+	noise_bar.tooltip_text = "Noise: the neighbours are listening"
+	scol.add_child(noise_bar)
+	var noise_lbl := UIKit.label("noise", 11, UIKit.DIM)
+	noise_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	scol.add_child(noise_lbl)
+
+	crosshair = UIKit.label("·", 28, Color(1, 1, 1, 0.8))
 	crosshair.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	crosshair.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	crosshair.add_theme_font_size_override("font_size", 28)
 	crosshair.add_theme_color_override("font_outline_color", Color.BLACK)
 	crosshair.add_theme_constant_override("outline_size", 4)
 	hud.add_child(crosshair)
 
-	# Interaction prompt: [E] keycap + action
 	prompt = PanelContainer.new()
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.07, 0.05, 0.13, 0.82)
-	sb.border_color = Color("b05cff")
-	sb.set_border_width_all(1)
-	sb.set_corner_radius_all(10)
-	sb.content_margin_left = 10
-	sb.content_margin_right = 16
-	sb.content_margin_top = 6
-	sb.content_margin_bottom = 6
-	prompt.add_theme_stylebox_override("panel", sb)
+	prompt.add_theme_stylebox_override("panel", UIKit.box(Color(0.07, 0.05, 0.13, 0.82), 10, UIKit.ACCENT, 1, 12))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	prompt.add_child(row)
 	var key_panel := PanelContainer.new()
-	var ksb := StyleBoxFlat.new()
-	ksb.bg_color = Color("f4efff")
-	ksb.set_corner_radius_all(6)
-	ksb.content_margin_left = 9
-	ksb.content_margin_right = 9
-	ksb.content_margin_top = 1
-	ksb.content_margin_bottom = 1
-	key_panel.add_theme_stylebox_override("panel", ksb)
-	prompt_key = Label.new()
-	prompt_key.text = "E"
-	prompt_key.add_theme_font_size_override("font_size", 18)
-	prompt_key.add_theme_color_override("font_color", Color("120f1c"))
-	key_panel.add_child(prompt_key)
+	key_panel.add_theme_stylebox_override("panel", UIKit.box(UIKit.TEXT, 6, Color(), 0, 9))
+	key_panel.add_child(UIKit.label("E", 18, Color("120f1c")))
 	row.add_child(key_panel)
-	prompt_text = Label.new()
-	prompt_text.add_theme_font_size_override("font_size", 18)
-	prompt_text.add_theme_color_override("font_color", Color("f4efff"))
+	prompt_text = UIKit.label("", 18, UIKit.TEXT)
 	row.add_child(prompt_text)
 	prompt.visible = false
 	hud.add_child(prompt)
+
+	toast_label = UIKit.label("", 19, UIKit.TEXT)
+	toast_label.add_theme_color_override("font_outline_color", Color(0.03, 0.02, 0.07))
+	toast_label.add_theme_constant_override("outline_size", 8)
+	toast_label.modulate.a = 0.0
+	var tl := CanvasLayer.new()
+	tl.layer = 30
+	add_child(tl)
+	tl.add_child(toast_label)

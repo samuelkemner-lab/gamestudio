@@ -49,6 +49,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			interacted.emit(target)
 
 
+## Snap the view towards a world point (e.g. the booth when a take starts).
+func look_at_point(p: Vector3) -> void:
+	var d := p - global_position
+	rotation.y = atan2(-d.x, -d.z)
+	var flat := Vector2(d.x, d.z).length()
+	camera.rotation.x = clampf(atan2(p.y - (global_position.y + 1.6), flat), -1.2, 1.2)
+
+
 func hover_target() -> Object:
 	if ray.is_colliding():
 		var c := ray.get_collider()

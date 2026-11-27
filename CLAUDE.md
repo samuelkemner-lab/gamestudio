@@ -37,6 +37,12 @@ Lees **docs/ART_DIRECTION.md** (de masterprompt) vóór elke visuele taak en toe
 - `assets/shaders/night_building.gdshader`: Kenney-gebouwen 's nachts (donkere gevels, willekeurig verlichte ramen)
 - `tools/inspect_scene.gd`, `tools/contact_sheet.gd`: maten en materialen van modellen bekijken
 - `scripts/player.gd`: first-person controller, [E] interactie via de `interact`-meta
+- `scripts/rappers.gd`: rapperdata (smaak, geduld, brief, teksten); `scripts/judge.gd`: score 0–100 → sterren + beloning
+- `scripts/session.gd`: sessie-state machine (ARRIVING → WAITING → RECORDING → REVIEW → LEAVING)
+- `scripts/npc.gd`: Kenney Mini Character + accessoires, lopen, animaties, tekstballon, brabbelstem (`voice_synth.gd`)
+- `scripts/chaos.gd`: geluidsmeter → buren → politie; `scripts/game_state.gd`: geld/rep/cred + save (user://)
+- `scripts/phone_ui.gd`, `scripts/results_ui.gd`, `scripts/ui_kit.gd`: telefoon, resultaten, gedeelde UI-stijl
+- `assets/models/kenney_characters`: CC0-personages (let op: in de bron-repo staan ze in Git LFS, ophalen via media.githubusercontent.com)
 - `scripts/sequencer.gd`: audiokern (16 stappen, een audio-bus per spoor, mixer-API)
 - `scripts/loopr_ui.gd`: LOOPR-interface (Channel Rack + Mixer)
 - `tests/run_tests.gd`: headless smoke tests

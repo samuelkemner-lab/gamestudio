@@ -3,6 +3,8 @@ extends Control
 ## LOOPR: the in-game DAW. v0.1 = Channel Rack (step sequencer) + Mixer.
 
 signal close_requested
+signal record_pressed
+signal finish_pressed
 
 const BG := Color("120f1c")
 const PANEL := Color("1c1730")
@@ -21,6 +23,14 @@ var step_buttons: Array = []  # [track][step] -> Button
 var playhead: Array[ColorRect] = []
 var play_button: Button
 var bpm_box: SpinBox
+var session: Session
+var _sess_bar: PanelContainer
+var _sess_name: Label
+var _sess_brief: Label
+var _sess_takes: Label
+var _sess_last: Label
+var _rec_btn: Button
+var _fin_btn: Button
 
 
 func setup(sequencer: Sequencer) -> void:
@@ -44,6 +54,7 @@ func setup(sequencer: Sequencer) -> void:
 	margin.add_child(root)
 
 	root.add_child(_build_top_bar())
+	root.add_child(_build_session_bar())
 
 	var tabs := TabContainer.new()
 	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -79,7 +90,7 @@ func _build_top_bar() -> Control:
 	bar.add_child(logo)
 
 	var sub := Label.new()
-	sub.text = "v0.2  //  bedroom edition"
+	sub.text = "v0.4  //  bedroom edition"
 	sub.add_theme_color_override("font_color", TEXT_DIM)
 	sub.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	bar.add_child(sub)
@@ -125,6 +136,75 @@ func _build_top_bar() -> Control:
 	hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	bar.add_child(hint)
 	return bar
+
+
+# ---------- Session bar (rapper brief + record) ----------
+
+func _build_session_bar() -> Control:
+	_sess_bar = PanelContainer.new()
+	_sess_bar.add_theme_stylebox_override("panel", _box(PANEL_LIGHT, 10))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 18)
+	_sess_bar.add_child(row)
+	var who := VBoxContainer.new()
+	who.custom_minimum_size.x = 200
+	_sess_name = Label.new()
+	_sess_name.add_theme_font_size_override("font_size", 20)
+	_sess_name.add_theme_color_override("font_color", TEXT)
+	who.add_child(_sess_name)
+	_sess_takes = Label.new()
+	_sess_takes.add_theme_color_override("font_color", Color("ff3d7f"))
+	who.add_child(_sess_takes)
+	row.add_child(who)
+	_sess_brief = Label.new()
+	_sess_brief.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_sess_brief.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_sess_brief.add_theme_color_override("font_color", TEXT_DIM)
+	_sess_brief.add_theme_font_size_override("font_size", 15)
+	row.add_child(_sess_brief)
+	_sess_last = Label.new()
+	_sess_last.add_theme_font_size_override("font_size", 22)
+	_sess_last.add_theme_color_override("font_color", Color("f2c14e"))
+	_sess_last.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(_sess_last)
+	_rec_btn = _button("●  RECORD TAKE", Color("ff3d7f"))
+	_rec_btn.custom_minimum_size = Vector2(170, 46)
+	_rec_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_rec_btn.pressed.connect(func(): record_pressed.emit())
+	row.add_child(_rec_btn)
+	_fin_btn = _button("✓  FINISH", Color("1f9e6e"))
+	_fin_btn.custom_minimum_size = Vector2(130, 46)
+	_fin_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_fin_btn.add_theme_stylebox_override("disabled", _box(Color("1f9e6e").darkened(0.6), 8))
+	_fin_btn.pressed.connect(func(): finish_pressed.emit())
+	row.add_child(_fin_btn)
+	_sess_bar.visible = false
+	return _sess_bar
+
+
+func bind_session(s: Session) -> void:
+	session = s
+	s.state_changed.connect(func(_st): update_session())
+	s.take_judged.connect(func(_r): update_session())
+	update_session()
+
+
+func update_session() -> void:
+	if session == null:
+		return
+	var active := session.state in [Session.State.WAITING, Session.State.RECORDING, Session.State.REVIEW, Session.State.ARRIVING]
+	_sess_bar.visible = active
+	if not active:
+		return
+	var r := session.rapper
+	_sess_name.text = "%s  ·  %s" % [r.name, r.style]
+	_sess_takes.text = "patience  " + "♥".repeat(session.takes_left) + "♡".repeat(int(r.patience) - session.takes_left)
+	_sess_brief.text = session.brief()
+	_sess_last.text = UIKit.stars(int(session.best.stars)) if not session.best.is_empty() else ""
+	var st := session.state
+	_rec_btn.disabled = not (st == Session.State.WAITING or st == Session.State.REVIEW) or session.takes_left <= 0
+	_rec_btn.text = "●  RECORDING..." if st == Session.State.RECORDING else ("●  RECORD TAKE" if session.takes_done == 0 else "●  RETAKE")
+	_fin_btn.disabled = st != Session.State.REVIEW
 
 
 # ---------- Channel rack ----------
@@ -299,6 +379,8 @@ func _button(text: String, color: Color) -> Button:
 	b.add_theme_stylebox_override("hover", _box(color.lightened(0.15), 8))
 	b.add_theme_stylebox_override("pressed", _box(color.darkened(0.2), 8))
 	b.add_theme_color_override("font_color", TEXT)
+	b.add_theme_color_override("font_disabled_color", Color(1, 1, 1, 0.35))
+	b.add_theme_stylebox_override("disabled", _box(color.darkened(0.6), 8))
 	return b
 
 

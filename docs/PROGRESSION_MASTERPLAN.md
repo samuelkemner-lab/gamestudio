@@ -150,6 +150,7 @@ Tempo-doel:
 | P6a | OV + nieuwe wijken: metro (4 stations), tram 4, Centraal (kiosk, busking), Marktplein (Huisraad-warenhuis, döner), Havenkwartier (club De Kraan, open mic) | ✅ v0.12 |
 | P6b | Loft, vrij plaatsen, Beatmarkt, crate digging, step-diefstal + slot, step mee in de metro | ⬜ |
 | P6c | Zwartrijden + controleurs (boete, smoesje, wegrennen) | ✅ v0.12.1 |
+| P6d | Straatleven: energie + consumables (hotbar), vissen, kraslot, duiven voeren, paraplu, kapper + kleding (DRIP), KADE RUN-tijdrit, BEAT DROP-arcade | ✅ v0.13 |
 
 ## 7. Acceptatie (per fase een test in tests/run_tests.gd)
 - **P1:**

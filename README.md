@@ -1,4 +1,4 @@
-# Studio Grind (prototype v0.8)
+# Studio Grind (prototype v0.13)
 
 Een studio-producer-sim: je begint als wannabe SoundCloud-producer in je slaapkamer en bouwt beats in **LOOPR**.
 
@@ -22,12 +22,16 @@ Een studio-producer-sim: je begint als wannabe SoundCloud-producer in je slaapka
 | E | Interactie: monitor = LOOPR, stoel = zitten, bed = liggen (nog een keer E = slapen), lichtknop, deur, winkels, mensen aanspreken, kat aaien, bankjes. Losse spullen (blikjes, fles, bal, doos) oppakken / neerleggen |
 | Linkermuis / rechtermuis | Opgepakt voorwerp gooien / neerleggen |
 | 1–4 | Keuze in een gesprek (of pattern A–D in LOOPR) |
+| 1–6 | Item uit je hotbar gebruiken (joint, RAKET, pils, water, brood, kraslot), als er geen menu open is |
+| U | Paraplu open/dicht |
+| E (bij het vissen) | Binnenhalen als de dobber zakt |
+| D F J K / pijltjes | Spelen op de BEAT DROP-kast |
 | TAB | Telefoon (GRIND OS): Messages, Phone, WAVR, Gear, Huisraad, Ruilmarkt, Zoef, Settings |
 | Ctrl+S | Project opslaan in LOOPR (beschermt tegen een pc-crash) |
 | Ctrl+Z | Ongedaan maken in LOOPR |
 | F9 | Grafische kwaliteit High/Low (Low = sneller op zwakke pc's) |
 | SPATIE | Beat afspelen/stoppen (in LOOPR) |
-| ESC | LOOPR sluiten / muis vrijgeven |
+| ESC | LOOPR, menu of arcade sluiten / muis vrijgeven |
 
 Vereist een videokaart met Vulkan-ondersteuning; dat heeft vrijwel elke pc van na 2016.
 
@@ -38,6 +42,42 @@ Vereist een videokaart met Vulkan-ondersteuning; dat heeft vrijwel elke pc van n
 4. Klik **RECORD TAKE**. De rapper rapt twee maten en geeft een oordeel (1–5 sterren). Elke retake kost geduld.
 5. Klik **FINISH** om de beste take uit te brengen. Je krijgt geld, reputatie en Street Cred.
 6. Pas op met het volume: de geluidsmeter loopt op. Bij 100% belt de buurman de politie (€40 boete).
+
+## In v0.13: leven op straat
+- **Energie (groene balk onder de geluidsmeter):** loopt leeg door de nacht, sneller bij sprinten en in de regen zonder paraplu. Leeg = moe, trager.
+- **Hotbar (toets 1–6), te koop in de nachtwinkel en de coffeeshop:**
+  - **Joint:** je loopt trager, beeld warm en dof, geluid gedempt. Volgende rapper +1 take. Later trek (munchies).
+  - **RAKET** (energiedrank): sneller sprinten, langer op. Daarna een crash, en bij te veel gaat je hart racen.
+  - **Pils:** moed bij de open mic, maar je zwalkt. Dronken op de step bij de politieauto = €80 boete.
+  - **Water:** nuchter worden, crash voorbij.
+  - **Brood:** duiven voeren, of zelf eten tegen de trek.
+  - **Kraslot** "Maas Miljoen" (€2): kansen staan op de achterkant, gemiddeld krijg je ~55% terug.
+- **Ook nieuw:**
+  - **Koffie** bij de kiosk op Centraal.
+  - **Eten** bij de snackbar en de döner.
+  - **Keelspray** voor je rapper: +5 op de volgende take.
+  - **Paraplu** (U).
+- **Vissen** aan de kade en in de haven (hengel €15 in de nachtwinkel):
+  - E bij de reling gooit uit. Zakt de dobber, druk dan op tijd E.
+  - Je vangt vis (Ome Kees koopt hem voor €4), rommel, fietsen, portemonnees, soms een kluisje of de kwijtgeraakte telefoon van een rapper.
+- **Fresh Fades en Drip Depot (Marktplein):**
+  - Een fade of line-up en kleding (één stuk per plek: hoofd, top, nek, voeten) geven **DRIP**.
+  - Wat drip doet:
+    - Bouncer Mo van De Kraan laat je pas binnen bij 4+ drip (of een tientje).
+    - Extra punten bij de open mic.
+    - Mensen herkennen je eerder.
+    - Rappers betalen +1% per punt (max +10%).
+  - Een fade groeit na 2 nachten uit.
+- **KADE RUN (e-step tijdrit):**
+  - Rij met je step door de startpoort op de kade (oost). De klok start als je de lijn passeert.
+  - Route: 6 poorten langs het water, de zijstraat in en over de hoofdweg (met verkeer).
+  - Versla Mo (36 s), Jesse (28 s) en Bilal (21 s, alleen met een getunede motor) voor €15/€30/€75 + CRED. Elke prijs krijg je één keer.
+  - Je beste tijd staat op het bord.
+- **BEAT DROP** (snackbar, €1 per potje): ritmespel met 4 banen (D F J K).
+  - Perfect = 300 punten, goed = 100. Combo's vermenigvuldigen tot ×4.
+  - Versla MO, DJ R en KEES op de kast voor prijzen.
+  - Bij 20.000+ krijg je één keer per nacht "warme vingers": +1 take bij je volgende rapper.
+- **Fix:** toetsen 1–6, U, E bij het vissen en de cijfers/ESC in gespreksmenu's werkten niet. Nu wel.
 
 ## In v0.12.1: zwartrijden en controleurs
 - **Kies bij elke rit bij de kaartlezer:** inchecken (€2) of niet.

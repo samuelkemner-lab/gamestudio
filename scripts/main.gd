@@ -3,7 +3,7 @@ extends Node3D
 ## Title screen → bedroom studio → phone DMs → rapper session in the booth → rating & payout.
 
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
-const VERSION := "v0.12.1 prototype"
+const VERSION := "v0.13 prototype"
 const DAWN := 30 * 60  # 06:00 the next morning
 const BOOTH_LOOK := Vector3(1.45, 1.2, -1.6)
 const CITY_ORIGIN := Vector3(0, 0, 700)  # the street lives far away from the flat interior
@@ -233,9 +233,12 @@ func _ready() -> void:
 	talk_ui.visible = false
 	talk_ui.chosen.connect(_on_talk_chosen)
 	talk_ui.closed.connect(_end_talk)
+	var arcade_layer := CanvasLayer.new()
+	arcade_layer.layer = 31  # above toasts and the HUD
+	add_child(arcade_layer)
 	arcade = ArcadeUI.new()
 	arcade.name = "Arcade"
-	layer.add_child(arcade)
+	arcade_layer.add_child(arcade)
 	arcade.finished.connect(_on_arcade_finished)
 	arcade.closed.connect(func(): _set_ui_mode(false))
 
@@ -1583,6 +1586,7 @@ func play_arcade(seed_val := -1) -> void:
 		return
 	city_ui.close()
 	_set_ui_mode(true)
+	arcade.high = int(game.records.get("arcade_high", 0))
 	arcade.open(seed_val)
 
 

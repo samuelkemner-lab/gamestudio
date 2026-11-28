@@ -11,7 +11,7 @@ signal aborted(reason: String)
 signal armed_up
 
 const START := Vector3(58.0, 0, 37.2)
-const GATES := [Vector3(35.0, 0, 37.2), Vector3(20.0, 0, 32.0), Vector3(20.0, 0, 18.0), Vector3(20.0, 0, 2.0),
+const GATES := [Vector3(40.0, 0, 37.2), Vector3(20.0, 0, 32.0), Vector3(20.0, 0, 18.0), Vector3(20.0, 0, 2.0),
 	Vector3(-10.0, 0, -2.5), Vector3(-50.0, 0, -2.5)]
 const RADIUS := 3.6  # how close counts as "through"
 const HALF := 2.8  # visual half width of a gate (clears the tram on the main road)

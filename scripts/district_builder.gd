@@ -330,7 +330,7 @@ func _markt() -> void:
 	_shopfront("doner", "DONER PALACE", "DÖNER · DURUM · KAPSALON", -10.0, 1, 12.0, Color("ff5a3d"), Color("ffd0a0"))
 	_shopfront("barber", "FRESH FADES", "KNIPPEN · FADES · LINE-UPS", 8.0, 1, 16.0, Color("3ab8ff"), Color("d8f0ff"))
 	_shopfront("drip", "DRIP DEPOT", "STREETWEAR · SNEAKERS · CHAINS", 26.0, 1, 14.0, Color("ff3aa0"), Color("ffd0e8"))
-	_barber_pole(Vector3(8.0 - 7.4, 2.4, LINE - 0.35))
+	_barber_pole(Vector3(8.0 + 7.2, 2.3, LINE - 0.8))
 	# market hall: a huge arch, its glass end wall glowing with the painted ceiling inside
 	var g := group("MarketHall")
 	var arch := cyl(17.0, 46.0)
@@ -378,17 +378,17 @@ func _barber_pole(pos: Vector3) -> void:
 	_pole = Node3D.new()
 	_pole.position = pos
 	add_child(_pole)
-	var c := cyl(0.09, 0.9)
-	part(_pole, c, Vector3.ZERO, glow(Color("f2f2f2"), 0.6))
-	for k in 6:
+	var c := cyl(0.13, 1.1)
+	part(_pole, c, Vector3.ZERO, glow(Color("f2f2f2"), 0.8))
+	for k in 7:
 		var stripe := MeshInstance3D.new()
-		stripe.mesh = box(Vector3(0.2, 0.06, 0.2))
-		stripe.material_override = glow([Color("e0302a"), Color("2f6bff")][k % 2], 1.2)
-		stripe.position = Vector3(0, -0.4 + k * 0.16, 0)
+		stripe.mesh = box(Vector3(0.28, 0.07, 0.28))
+		stripe.material_override = glow([Color("e0302a"), Color("2f6bff")][k % 2], 1.6)
+		stripe.position = Vector3(0, -0.45 + k * 0.15, 0)
 		stripe.rotation_degrees = Vector3(0, k * 30.0, 25)
 		_pole.add_child(stripe)
-	part(_pole, cyl(0.12, 0.08), Vector3(0, 0.5, 0), mat(Color("c8c8c8"), 0.3, ""))
-	part(_pole, cyl(0.12, 0.08), Vector3(0, -0.5, 0), mat(Color("c8c8c8"), 0.3, ""))
+	part(_pole, cyl(0.17, 0.1), Vector3(0, 0.6, 0), mat(Color("c8c8c8"), 0.3, ""))
+	part(_pole, cyl(0.17, 0.1), Vector3(0, -0.6, 0), mat(Color("c8c8c8"), 0.3, ""))
 
 
 # ================= Havenkwartier =================

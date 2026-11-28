@@ -196,6 +196,25 @@ func _run() -> void:
 			await physics_frame
 		await _save(out + "/shot_neon.png")
 
+	if want.call("arcade"):
+		main._set_ui_mode(true)
+		var arc: ArcadeUI = main.arcade
+		arc.open(7)
+		arc.set_process(false)
+		arc.t = 9.0
+		for n in arc.notes:
+			if float(n.t) < 8.95:
+				n.state = "hit"
+		arc.score = 8400
+		arc.combo = 23
+		arc._flash = ["PERFECT", 0.3]
+		arc._lane_flash[1] = 0.1
+		arc._layout()
+		arc.queue_redraw()
+		await _save(out + "/shot_arcade.png")
+		arc.quit()
+		arc.set_process(true)
+
 	if want.call("night"):
 		main.game.record_track("lil_tear", 4, 82)
 		main.go_to_sleep()
@@ -242,11 +261,18 @@ func _run() -> void:
 			["city_bridge", Vector3(-30, 0.05, 38.6), 120.0, 14.0],
 			["city_alley", Vector3(20, 0.05, 30.0), 0.0, 4.0],
 			["city_rain", Vector3(-30, 0.05, 8.2), -60.0, 3.0],
+			["city_kaderun", Vector3(66, 0.05, 37.0), 90.0, 1.0],
 		]:
 			if city_views.size() > 0 and not v[0] in city_views:
 				continue
 			if v[0] == "city_rain":
 				c.apply_weather("rain")
+			if v[0] == "city_kaderun":
+				main.trial.set_process(false)
+				main.trial.begin()
+				main.trial.t = 4.2
+				for it in ["raket", "joint", "water"]:
+					Vitals.add_item(main.game, it)
 			main.player.global_position = c.to_global(v[1])
 			main.player.rotation.y = deg_to_rad(v[2])
 			main.player.camera.rotation.x = deg_to_rad(v[3])
@@ -389,7 +415,8 @@ func _run() -> void:
 			main.city.set_process(true)
 		for spec in [["t_centraal", "centraal", Vector3(0.0, 0.05, 4.0), 10.0, 14.0], ["t_markt", "markt", Vector3(22.0, 0.05, 4.0), 70.0, 8.0],
 				["t_markt_shops", "markt", Vector3(-18.0, 0.05, 1.0), 180.0, 6.0],
-				["t_haven", "haven", Vector3(-5.0, 0.05, 15.0), 160.0, 8.0], ["t_haven_water", "haven", Vector3(0.0, 0.05, 13.0), 0.0, 6.0]]:
+				["t_haven", "haven", Vector3(-5.0, 0.05, 15.0), 160.0, 8.0], ["t_haven_water", "haven", Vector3(0.0, 0.05, 13.0), 0.0, 6.0],
+				["t_markt_style", "markt", Vector3(17.0, 0.05, -1.5), 180.0, 9.0]]:
 			if not spec[0] in tviews:
 				continue
 			main._activate_area(spec[1])

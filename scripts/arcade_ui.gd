@@ -23,6 +23,7 @@ const TABLE := [
 ]
 
 var playing := false
+var high := 0  # your high score, shown next to the machine's table (set by main)
 var t := 0.0
 var score := 0
 var combo := 0
@@ -217,7 +218,10 @@ func _rect() -> Rect2:
 
 func _layout() -> void:
 	var r := _rect()
-	_info.text = "BEAT DROP\nSCORE %d\nCOMBO %d  ×%d" % [score, combo, mult(combo)]
+	var table := ""
+	for e in TABLE:
+		table += "\n%-6s %d" % [e.name, e.score]
+	_info.text = "BEAT DROP\n\nSCORE  %d\nCOMBO  %d  ×%d\n\nHIGH SCORES%s\nYOU    %s" % [score, combo, mult(combo), table, str(high) if high > 0 else "--"]
 	_info.position = r.position + Vector2(r.size.x + 24, 8)
 	_result.reset_size()
 	_result.position = Vector2(r.position.x + (r.size.x - _result.size.x) / 2.0, r.position.y + r.size.y * 0.32)
@@ -254,7 +258,7 @@ func _draw() -> void:
 		var f := get_theme_default_font()
 		var txt: String = _flash[0]
 		var col := UIKit.GOLD if txt == "PERFECT" else (UIKit.CYAN if txt == "GOOD" else UIKit.POP)
-		draw_string(f, Vector2(r.position.x, line_y - 60), txt, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 30, Color(col, minf(float(_flash[1]) * 3.0, 1.0)))
+		draw_string(f, Vector2(r.position.x, r.position.y + r.size.y * 0.42), txt, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 30, Color(col, minf(float(_flash[1]) * 3.0, 1.0)))
 
 
 ## Score a finished game against the machine's table (each name pays once) and your own high score.

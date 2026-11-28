@@ -372,6 +372,8 @@ func _input(event: InputEvent) -> void:
 		KEY_ESCAPE:
 			if loopr.visible:
 				close_loopr()
+			elif talk_ui.visible:
+				talk_ui.close()
 			elif city_ui.visible:
 				city_ui.close()
 			elif phone.visible:
@@ -394,9 +396,25 @@ func _input(event: InputEvent) -> void:
 				if sequencer.undo():
 					show_toast("Undo.")
 				get_viewport().set_input_as_handled()
-		KEY_1, KEY_2, KEY_3, KEY_4:
-			if loopr.visible and not event.ctrl_pressed:
-				sequencer.select_pattern(event.physical_keycode - KEY_1)
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6:
+			var idx: int = event.physical_keycode - KEY_1
+			if loopr.visible:
+				if not event.ctrl_pressed and idx < 4:
+					sequencer.select_pattern(idx)
+					get_viewport().set_input_as_handled()
+			elif talk_ui.visible:
+				talk_ui.choose_index(idx)
+				get_viewport().set_input_as_handled()
+			elif not _ui_open() and not transit.is_riding():
+				use_item(Vitals.HOTBAR[idx])
+				get_viewport().set_input_as_handled()
+		KEY_U:
+			if not _ui_open():
+				toggle_umbrella()
+				get_viewport().set_input_as_handled()
+		KEY_E:
+			if fishing.active and player.pose == "fish" and not _ui_open():
+				fishing.strike()
 				get_viewport().set_input_as_handled()
 		KEY_F9:
 			city.apply_quality(not city.quality_high)

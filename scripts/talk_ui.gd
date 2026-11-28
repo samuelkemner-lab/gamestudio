@@ -7,12 +7,14 @@ signal closed
 
 var _panel: PanelContainer
 var _ids: Array[String] = []
+var _enabled: Array[bool] = []
 
 
 func open(title: String, subtitle: String, options: Array) -> void:
 	for c in get_children():
 		c.queue_free()
 	_ids.clear()
+	_enabled.clear()
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_panel = PanelContainer.new()
@@ -35,6 +37,7 @@ func open(title: String, subtitle: String, options: Array) -> void:
 		b.pressed.connect(func(): choose(id))
 		col.add_child(b)
 		_ids.append(id)
+		_enabled.append(not b.disabled)
 	var bye := UIKit.button("ESC   Leave", UIKit.BG, 14)
 	bye.pressed.connect(close)
 	col.add_child(bye)
@@ -50,7 +53,7 @@ func choose(id: String) -> void:
 
 
 func choose_index(i: int) -> void:
-	if i >= 0 and i < _ids.size():
+	if i >= 0 and i < _ids.size() and _enabled[i]:
 		choose(_ids[i])
 
 

@@ -1014,6 +1014,30 @@ func _run() -> void:
 	kr._process(0.016)
 	check(not kr.running, "get off mid-run: run over")
 	main.travel(false)
+
+	# ---------- keys: hotbar, umbrella, menu numbers ----------
+	var key := func(code: Key) -> void:
+		var ev := InputEventKey.new()
+		ev.physical_keycode = code
+		ev.pressed = true
+		main._input(ev)
+	gs.items = {}
+	Vitals.add_item(gs, "water")
+	key.call(KEY_4)
+	check(Vitals.count(gs, "water") == 0, "key 4 drinks the water on the hotbar")
+	Vitals.add_item(gs, "paraplu")
+	main.umbrella_open = false
+	key.call(KEY_U)
+	check(main.umbrella_open, "U opens the umbrella")
+	key.call(KEY_U)
+	gs.money = 50
+	main._district_shop("barber")
+	key.call(KEY_2)
+	check(not main.talk_ui.visible and Style.fresh(gs) == 1, "number keys pick in a menu (2 = line-up)")
+	main._district_shop("barber")
+	key.call(KEY_ESCAPE)
+	check(not main.talk_ui.visible, "ESC closes a menu")
+	main._set_ui_mode(false)
 	main._set_ui_mode(false)
 	main._talk_mode = ""
 

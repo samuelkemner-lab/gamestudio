@@ -50,7 +50,9 @@ var _hotbar: Label
 var _energy_bar: ProgressBar
 var _tint: ColorRect
 var _lpf_idx := -1
-var _lpf: AudioEffectLowPassFilter  # chosen destination, waiting for "check in or not"
+var _lpf: AudioEffectLowPassFilter
+var fishing: Fishing
+var _fish_line: MeshInstance3D  # chosen destination, waiting for "check in or not"
 const DISTRICT_ORIGINS := {"centraal": Vector3(0, 0, 1500), "markt": Vector3(0, 0, 2200), "haven": Vector3(0, 0, 2900)}
 const METRO_ORIGIN := Vector3(0, -80, 3600)
 var _monitor_vp: SubViewport
@@ -99,6 +101,25 @@ func _ready() -> void:
 	transit.main = self
 	transit.build_station()
 	transit.ride_finished.connect(_on_ride_finished)
+	fishing = Fishing.new()
+	fishing.name = "Fishing"
+	add_child(fishing)
+	fishing.caught.connect(_on_catch)
+	fishing.missed.connect(func(): show_toast("It got away..."))
+	fishing.ended.connect(_on_fishing_ended)
+	_fish_line = MeshInstance3D.new()
+	var lm := StandardMaterial3D.new()
+	lm.albedo_color = Color(0.85, 0.85, 0.9, 0.6)
+	lm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	lm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	var lc := CylinderMesh.new()
+	lc.top_radius = 0.0025
+	lc.bottom_radius = 0.0025
+	lc.height = 1.0
+	_fish_line.mesh = lc
+	_fish_line.material_override = lm
+	_fish_line.visible = false
+	add_child(_fish_line)
 
 	game = GameState.new()
 	game.name = "GameState"
@@ -432,6 +453,8 @@ func _on_interacted(target: Object) -> void:
 		"switch":
 			room.toggle_lights()
 			player._play_fx(AmbienceSynth.tick(1400.0))
+		"fish":
+			start_fishing(target)
 		"estep":
 			player.mount(target.get_meta("estep"))
 			show_toast("W go · S brake · A/D steer · B bell · E/SPACE get off")
@@ -1173,6 +1196,67 @@ func _apply_vitals(delta: float) -> void:
 	if Vitals.count(game, "paraplu") > 0:
 		parts.append("U umbrella%s" % (" (open)" if umbrella_open else ""))
 	_hotbar.text = "   ".join(parts)
+
+
+# ---------- Fishing ----------
+
+func start_fishing(spot: Node3D) -> void:
+	if Vitals.count(game, "hengel") <= 0:
+		show_toast("You need a fishing rod. (Night shop, €15)")
+		return
+	var b: Node3D = spot.get_meta("builder")
+	player.enter_pose("fish", b.to_global(spot.get_meta("stand")), PI, 1.6, -0.3)
+	player.set_rod(true)
+	fishing.cast(b.to_global(spot.get_meta("water")))
+	show_toast("Waiting for a bite... [E] when the bobber dips  ·  [SPACE] stop")
+
+
+func _on_catch(res: Dictionary) -> void:
+	game.stats.catches = int(game.stats.get("catches", 0)) + 1
+	game.add_xp(3)
+	match str(res.kind):
+		"fish":
+			if Vitals.add_item(game, "vis"):
+				show_toast("You caught a %s! (Ome Kees at the snackbar buys fish)" % res.name)
+			else:
+				show_toast("A %s. Your bag is full, you let it go." % res.name)
+		"junk":
+			show_toast("You reel in %s. Into the bin it goes." % res.name)
+		"bike":
+			game.add(int(res.money), 0, 0)
+			show_toast("You fish up %s! Someone on the Ruilmarkt pays €%d for it." % [res.name, int(res.money)])
+		"wallet":
+			game.add(int(res.money), 0, 0)
+			show_toast("%s with €%d in it. No ID. Finders keepers." % [str(res.name).capitalize(), int(res.money)])
+		"safe":
+			game.add(int(res.money), 0, 0)
+			_play_sfx(AmbienceSynth.cash())
+			show_toast("%s! You pry it open: €%d." % [str(res.name).capitalize(), int(res.money)])
+		"phone":
+			var r: Dictionary = Rappers.all()[randi() % Rappers.all().size()]
+			game.add(0, 3, 2)
+			game.message(str(r.name), "YO you found my phone in the maas?? the unreleased demo is on there. respect. i owe you")
+			show_toast("%s... with an unreleased demo of %s on it! You give it back.  +3 REP  +2 CRED" % [str(res.name).capitalize(), r.name])
+
+
+func _on_fishing_ended() -> void:
+	player.set_rod(false)
+	_fish_line.visible = false
+	if player.pose == "fish":
+		player.leave_pose()
+
+
+func _update_fish_line() -> void:
+	if not fishing.active:
+		return
+	if player.pose != "fish":
+		fishing.stop()
+		return
+	var a: Vector3 = player.rod_tip()
+	var b: Vector3 = fishing.bobber.global_position + Vector3(0, 0.08, 0)
+	_fish_line.visible = true
+	_fish_line.global_position = (a + b) / 2.0
+	_fish_line.global_basis = Basis(Quaternion(Vector3.UP, (b - a).normalized())).scaled(Vector3(1, a.distance_to(b), 1))
 
 
 # ---------- Metro & tram ----------

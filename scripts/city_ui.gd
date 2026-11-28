@@ -6,7 +6,8 @@ signal closed
 signal message(text: String)
 signal upgrades_changed
 
-const MUSIC_DISCOUNT := 0.85  # cash price in the store vs. the online shop on your phone
+const MUSIC_DISCOUNT := 0.85
+const FISH_PRICE := 4  # cash price in the store vs. the online shop on your phone
 
 const MENUS := {
 	"coffeeshop": {
@@ -226,9 +227,27 @@ func _menu(m: Dictionary) -> void:
 					message.emit(_buff_text(it))
 				open(shop_id, game))
 		_row(str(it.name), str(it.desc), b)
+	if shop_id == "snackbar" and Vitals.count(game, "vis") > 0:
+		var n := Vitals.count(game, "vis")
+		var sell := UIKit.button("SELL  €%d" % (n * FISH_PRICE), Color("2f6b9a"), 15)
+		sell.custom_minimum_size.x = 120
+		sell.pressed.connect(func():
+			sell_fish()
+			open(shop_id, game))
+		_row("Your catch (%d fish)" % n, "\"Uit de Maas? Ach, voor de kibbeling is het goed genoeg.\" Ome Kees pays €%d a fish." % FISH_PRICE, sell)
 	var status := _status_text()
 	if status != "":
 		_col.add_child(UIKit.label(status, 14, UIKit.CYAN))
+
+
+func sell_fish() -> int:
+	var n := Vitals.count(game, "vis")
+	if n <= 0:
+		return 0
+	game.items.erase("vis")
+	game.add(n * FISH_PRICE, 0, 0)
+	message.emit("Sold %d fish to Ome Kees for €%d." % [n, n * FISH_PRICE])
+	return n * FISH_PRICE
 
 
 func _buff_maxed(it: Dictionary) -> bool:

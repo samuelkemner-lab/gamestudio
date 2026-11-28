@@ -53,6 +53,7 @@ var _greeted := {}
 var _bouncer: NPC
 var skyline: RotterdamSkyline
 var tram4: Dictionary
+var fish_spots: Array[StaticBody3D] = []
 var metro_entrance: StaticBody3D
 var station_id := "zuidkade"
 var tram_stop_x := -8.0
@@ -103,6 +104,7 @@ func build_city() -> void:
 	_traffic()
 	tram4 = _tram(-8.0, -120.0, "4  CENTRAAL")
 	_tram_shelter(-8.0, 1, "Zuidkade")
+	_fishing_spots([-45.0, -10.0, 26.0, 50.0], WATER_Z - 0.9, WATER_Z + 4.0)
 	metro_entrance = _metro_entrance(Vector3(40.0, 0, 8.2), 180.0, "Zuidkade")
 	metro_entrance.set_meta("station", "zuidkade")
 	_traffic_lights()
@@ -1364,6 +1366,16 @@ func _tram(stop_x := -8.0, start_x := -120.0, dest := "4  CENTRAAL") -> Dictiona
 	board.set_meta("builder", self)
 	cars.append(entry)
 	return entry
+
+
+## Places at the railing where you can fish (E with a rod). `water` = where the bobber lands (local).
+func _fishing_spots(xs: Array, stand_z: float, water_z: float) -> void:
+	for x in xs:
+		var b := solid(Vector3(2.4, 1.0, 0.6), Vector3(x, 0.5, stand_z + 0.6), "fish", "Fish here")
+		b.set_meta("stand", Vector3(x, 0.05, stand_z))
+		b.set_meta("water", Vector3(x, -1.12, water_z))
+		b.set_meta("builder", self)
+		fish_spots.append(b)
 
 
 ## Tram stop shelter ("abri") with a timetable plate and the line number.

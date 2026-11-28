@@ -311,6 +311,31 @@ static func gulp() -> AudioStreamWAV:
 	return _wav(out, false)
 
 
+## Bobber landing in the water.
+static func plop() -> AudioStreamWAV:
+	var n := int(RATE * 0.25)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		var f := 600.0 * exp(-t * 18.0) + 120.0
+		out[i] = sin(TAU * f * t) * exp(-t * 14.0) * 0.45
+	return _wav(out, false)
+
+
+## Fish bite / splash: noisy burst.
+static func splash() -> AudioStreamWAV:
+	var n := int(RATE * 0.4)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		lp = lp * 0.7 + (randf() * 2.0 - 1.0) * 0.3
+		out[i] = lp * exp(-t * 7.0) * 0.6
+	return _wav(out, false)
+
+
 ## Coins / payout jingle.
 static func cash() -> AudioStreamWAV:
 	var n := int(RATE * 0.5)

@@ -460,6 +460,7 @@ func _haven() -> void:
 		ql.omni_range = 9.0
 		g.add_child(ql)
 	solid(Vector3(D_MAX - D_MIN, 4, 1), Vector3(0, 2, LINE + 6.2))
+	_fishing_spots([-32.0, 4.0, 34.0], LINE + 4.9, LINE + 10.0)
 	metro_entrance = _metro_entrance(Vector3(48.0, 0, -8.2), 0.0, "Havenkwartier")
 	metro_entrance.set_meta("station", "haven")
 	tram4 = {}

@@ -436,6 +436,47 @@ func _ride(delta: float) -> void:
 	_vignette.modulate.a = lerpf(_vignette.modulate.a, 0.0, 6.0 * delta)
 
 
+var rod: Node3D
+
+
+## Fishing rod in your right hand (view model). `tip()` = global position of the rod tip.
+func set_rod(on: bool) -> void:
+	if on and rod == null:
+		rod = Node3D.new()
+		rod.name = "Rod"
+		camera.add_child(rod)
+		rod.position = Vector3(0.28, -0.3, -0.45)
+		rod.rotation_degrees = Vector3(-55, 0, -8)
+		var m := StandardMaterial3D.new()
+		m.albedo_color = Color("2a2a30")
+		m.roughness = 0.3
+		var shaft := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.004
+		cm.bottom_radius = 0.012
+		cm.height = 1.6
+		shaft.mesh = cm
+		shaft.material_override = m
+		shaft.position = Vector3(0, 0.8, 0)
+		rod.add_child(shaft)
+		var reel := MeshInstance3D.new()
+		var rm := CylinderMesh.new()
+		rm.top_radius = 0.035
+		rm.bottom_radius = 0.035
+		rm.height = 0.03
+		reel.mesh = rm
+		reel.material_override = m
+		reel.position = Vector3(0.03, 0.15, 0)
+		reel.rotation_degrees = Vector3(0, 0, 90)
+		rod.add_child(reel)
+	if rod:
+		rod.visible = on
+
+
+func rod_tip() -> Vector3:
+	return rod.to_global(Vector3(0, 1.6, 0)) if rod else camera.global_position
+
+
 ## Umbrella in your left hand (view model): open it with [U].
 func set_umbrella(on: bool) -> void:
 	if on and umbrella == null:

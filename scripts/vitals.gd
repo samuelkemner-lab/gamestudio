@@ -15,6 +15,7 @@ const ITEMS := {
 	"keelspray": {"name": "Throat spray", "max": 5, "desc": "Give it to a rapper before a take: +5 on that take."},
 	"hengel": {"name": "Fishing rod", "max": 1, "desc": "Fish at the quay railing. You never know what bites."},
 	"paraplu": {"name": "Umbrella", "max": 1, "desc": "[U] to open. Rain stops draining your energy."},
+	"vis": {"name": "Fish", "max": 10, "desc": "Fresh from the Maas. Ome Kees at the snackbar buys them."},
 }
 const HOTBAR := ["joint", "raket", "pils", "water", "brood", "kraslot"]  # keys 1–6
 

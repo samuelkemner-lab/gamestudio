@@ -903,5 +903,42 @@ func _run() -> void:
 	check(is_equal_approx(gs.energy, 100.0) and gs.effects.is_empty(), "sleep resets energy and effects")
 	main.travel(false)
 
+	# ---------- fishing ----------
+	gs.reset()
+	sess.state = Session.State.IDLE
+	main.travel(true)
+	check(city.fish_spots.size() >= 4 and main.districts.haven.fish_spots.size() >= 3, "fishing spots on the Zuidkade quay and in the harbour")
+	var kinds := {}
+	for k in 1000:
+		kinds[Fishing.roll(k / 1000.0).kind] = int(kinds.get(Fishing.roll(k / 1000.0).kind, 0)) + 1
+	check(kinds.fish == 500 and kinds.phone == 30 and kinds.has("safe") and kinds.has("bike"), "loot table: 50% fish … 3% a rapper's phone")
+	main._on_interacted(city.fish_spots[0])
+	check(not main.fishing.active, "no rod, no fishing")
+	Vitals.add_item(gs, "hengel")
+	main._on_interacted(city.fish_spots[0])
+	check(main.fishing.active and pl.pose == "fish" and pl.rod != null and pl.rod.visible, "cast: standing at the railing with a rod")
+	main.fishing.t = main.fishing.wait
+	main.fishing._process(0.01)
+	check(main.fishing.phase == "bite", "the bobber dips: a bite")
+	var res: Dictionary = main.fishing.strike()
+	check(not res.is_empty() and int(gs.stats.catches) == 1, "strike in time: caught %s" % res.get("name", "?"))
+	main.fishing.phase = "bite"
+	main.fishing.t = Fishing.BITE_WINDOW + 0.1
+	main.fishing._process(0.01)
+	check(main.fishing.phase == "wait", "too slow: it got away")
+	main._on_catch({"kind": "fish", "name": "baars (perch)", "money": 0})
+	main._on_catch({"kind": "safe", "name": "a rusty little safe", "money": 60})
+	check(Vitals.count(gs, "vis") >= 1, "fish in your bag")
+	pl.leave_pose()
+	main._update_fish_line()
+	check(not main.fishing.active and not pl.rod.visible, "SPACE: stop fishing")
+	main.open_shop("snackbar")
+	var m_fish := gs.money
+	var n_fish := Vitals.count(gs, "vis")
+	main.city_ui.sell_fish()
+	check(gs.money == m_fish + n_fish * CityUI.FISH_PRICE and Vitals.count(gs, "vis") == 0, "sell your catch to Ome Kees")
+	main.city_ui.close()
+	main.travel(false)
+
 	print("RESULT: ", "PASS" if failures == 0 else "FAIL (%d)" % failures)
 	quit(failures)

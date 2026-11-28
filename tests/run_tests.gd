@@ -975,5 +975,47 @@ func _run() -> void:
 	main._set_ui_mode(false)
 	main._talk_mode = ""
 
+	# ---------- KADE RUN (e-step time trial) ----------
+	gs.estep.owned = true
+	gs.estep.battery = 100.0
+	if main.estep == null:
+		main._spawn_step()
+	main.travel(true)
+	var kr: TimeTrial = main.trial
+	check(kr != null and kr._gates.size() == TimeTrial.GATES.size(), "KADE RUN start gate and %d checkpoints on the Zuidkade" % TimeTrial.GATES.size())
+	gs.records = {}
+	var cash_tr := gs.money
+	pl.global_position = city.to_global(TimeTrial.START) + Vector3(0, 0.05, 0)
+	kr._cool = 0.0
+	kr._process(0.016)
+	check(not kr.armed, "on foot the gate does nothing")
+	main._on_interacted(main.estep.body)
+	pl.global_position = city.to_global(TimeTrial.START) + Vector3(0, 0.05, 0)
+	kr._process(0.016)
+	check(kr.armed and not kr.running, "roll up to the gate on the step: armed")
+	pl.global_position = city.to_global(TimeTrial.START + Vector3(-3.5, 0, 0))
+	kr._process(0.016)
+	check(kr.running and kr._gates[0].visible, "cross the line: the clock runs, first gate lights up")
+	for gi in TimeTrial.GATES.size():
+		pl.global_position = city.to_global(TimeTrial.GATES[gi])
+		kr._process(0.5)
+	check(not kr.running and float(gs.records.get("trial_best", 0.0)) > 0.0, "through all gates: finished, personal best saved (%.1f s)" % float(gs.records.get("trial_best", 0.0)))
+	var all_money := 0
+	for r in TimeTrial.RIVALS:
+		all_money += int(r.money)
+	check(gs.money == cash_tr + all_money and (gs.records.trial_beaten as Array).size() == 3, "beat all three riders: +€%d" % all_money)
+	var again := TimeTrial.result(gs, 5.0)
+	check(int(again.money) == 0 and again.new_wins.is_empty(), "rival prizes are paid once")
+	var slow := TimeTrial.result(gs, 50.0)
+	check(not slow.pb and int(slow.place) == 4, "a slow run doesn't touch your best")
+	kr._cool = 0.0
+	kr.begin()
+	pl.dismount()
+	kr._process(0.016)
+	check(not kr.running, "get off mid-run: run over")
+	main.travel(false)
+	main._set_ui_mode(false)
+	main._talk_mode = ""
+
 	print("RESULT: ", "PASS" if failures == 0 else "FAIL (%d)" % failures)
 	quit(failures)

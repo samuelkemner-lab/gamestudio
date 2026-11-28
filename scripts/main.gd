@@ -52,6 +52,7 @@ var _tint: ColorRect
 var _lpf_idx := -1
 var _lpf: AudioEffectLowPassFilter
 var fishing: Fishing
+var trial: TimeTrial
 var _fish_line: MeshInstance3D  # chosen destination, waiting for "check in or not"
 const DISTRICT_ORIGINS := {"centraal": Vector3(0, 0, 1500), "markt": Vector3(0, 0, 2200), "haven": Vector3(0, 0, 2900)}
 const METRO_ORIGIN := Vector3(0, -80, 3600)
@@ -160,6 +161,16 @@ func _ready() -> void:
 	player.crashed.connect(_on_crash)
 	city.set_player(player)
 	city.game = game
+	trial = TimeTrial.new()
+	city.add_child(trial)
+	trial.build(city)
+	trial.player = player
+	trial.update_board(game)
+	trial.armed_up.connect(func(): show_toast("KADE RUN: ride through the gate. The clock starts when you cross the line."))
+	trial.started.connect(_on_trial_started)
+	trial.gate_passed.connect(func(i: int, n: int): _play_sfx(AmbienceSynth.beep()); show_toast("Gate %d/%d  ·  %.1f s" % [i, n, trial.t]))
+	trial.finished.connect(_on_trial_finished)
+	trial.aborted.connect(func(reason: String): show_toast(reason))
 	for d in districts.values():
 		d.set_player(player)
 		d.game = game
@@ -310,6 +321,8 @@ func _tick_clock(delta: float) -> void:
 	var line := "DAY %d   ·   %s   ·   %s" % [game.day, game.clock_text(), area_title()]
 	if player and player.riding:
 		line += "\nE-STEP  %d km/h  ·  battery %d%%" % [int(round(player.riding.speed * 3.6)), int(ceil(float(game.estep.battery)))]
+	if trial and trial.running:
+		line += "\nKADE RUN  ·  %.1f s  ·  gate %d/%d" % [trial.t, trial.next + 1, TimeTrial.GATES.size()]
 	if not zoef.is_empty():
 		var left := int(zoef.until) - game.minutes
 		line += "\nZOEF  ·  %s  ·  %s" % [("deliver to " + str(zoef.address)) if zoef.picked else "pick up at Snackbar De Hoek", ("%d:%02d left" % [left / 60, left % 60]) if left >= 0 else "LATE"]
@@ -455,6 +468,11 @@ func _on_interacted(target: Object) -> void:
 			player._play_fx(AmbienceSynth.tick(1400.0))
 		"fish":
 			start_fishing(target)
+		"trial":
+			var best := float(game.records.get("trial_best", 0.0))
+			show_toast("KADE RUN: quay → side street → main road. Mo %.0f s · Jesse %.0f s · Bilal %.0f s · you %s.%s" % [
+				TimeTrial.RIVALS[0].time, TimeTrial.RIVALS[1].time, TimeTrial.RIVALS[2].time,
+				("%.1f s" % best) if best > 0.0 else "--", "" if game.estep.owned else " You need an e-step (GEAR app)."])
 		"estep":
 			player.mount(target.get_meta("estep"))
 			show_toast("W go · S brake · A/D steer · B bell · E/SPACE get off")
@@ -1531,6 +1549,26 @@ func _district_shop(id: String) -> void:
 				["Just dance for a bit (€10, chill: +1 take next session)", "dance", game.money >= 10],
 				["Pils at the bar (€4)", "pils", game.money >= 4]])
 			_set_ui_mode(true)
+
+
+func _on_trial_started() -> void:
+	_play_sfx(AmbienceSynth.chime())
+	show_toast("GO! Follow the blue gates. Pink = finish.")
+
+
+func _on_trial_finished(time: float) -> void:
+	var r := TimeTrial.result(game, time)
+	trial.update_board(game)
+	_play_sfx(AmbienceSynth.cash() if int(r.money) > 0 else AmbienceSynth.chime())
+	var line := "FINISH  %.2f s%s" % [time, "  ·  personal best!" if r.pb else ""]
+	if not r.new_wins.is_empty():
+		line += "  ·  you beat %s: +€%d%s" % [" & ".join(r.new_wins), r.money, ("  +%d CRED" % r.cred) if int(r.cred) > 0 else ""]
+	elif int(r.place) == 1:
+		line += "  ·  still the fastest on the Kade."
+	else:
+		var target: Dictionary = TimeTrial.RIVALS[TimeTrial.RIVALS.size() + 1 - int(r.place)]
+		line += "  ·  %s did %.1f s. Again?" % [str(target.name).get_slice(",", 0), target.time]
+	show_toast(line)
 
 
 ## Drip Depot: buy a piece (it goes straight on) or swap what you wear. One piece per slot.

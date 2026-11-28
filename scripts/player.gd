@@ -31,7 +31,17 @@ var pose := ""  # "" free, "seat", "bed"
 var held: RigidBody3D
 var riding: EStep  # on the e-step
 var _crash_roll := 0.0
-var pose_lock := false  # seated in a moving tram/metro: can't get up until it stops
+var pose_lock := false
+# vitals (set every frame by main from Vitals.mods)
+var speed_mult := 1.0
+var sprint_mult := 1.0
+var can_sprint := true
+var sway := 0.0  # slow camera drift (high / drunk)
+var wobble := 0.0  # drunk: drifting walk, wobbly steering
+var shake := 0.0  # crash / jitter
+var crash_speed := 3.8  # e-step: hit something faster than this and you fall off
+var umbrella: Node3D
+var _vt := 0.0  # seated in a moving tram/metro: can't get up until it stops
 var flashlight: SpotLight3D
 
 var _bob_t := 0.0
@@ -293,8 +303,10 @@ func _physics_process(delta: float) -> void:
 	if riding:
 		_ride(delta)
 		return
+	_vt += delta
 	_crash_roll = lerpf(_crash_roll, 0.0, 3.0 * delta)
-	camera.rotation.z = lerpf(camera.rotation.z, _crash_roll, 8.0 * delta)
+	var roll := _crash_roll + sin(_vt * 0.9) * 0.035 * sway + (randf() - 0.5) * 0.01 * shake
+	camera.rotation.z = lerpf(camera.rotation.z, roll, 8.0 * delta)
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
 		_fall_speed = maxf(_fall_speed, -velocity.y)
@@ -313,10 +325,13 @@ func _physics_process(delta: float) -> void:
 				set_posture(Posture.CROUCH)
 			elif not want_crouch and posture == Posture.CROUCH:
 				set_posture(Posture.STAND)
-		sprinting = Input.is_physical_key_pressed(KEY_SHIFT) and posture == Posture.STAND and input.y < 0.0 and not held
-	var speed: float = [WALK, CROUCH_SPEED, PRONE_SPEED][posture]
+		sprinting = Input.is_physical_key_pressed(KEY_SHIFT) and posture == Posture.STAND and input.y < 0.0 and not held and can_sprint
+		if wobble > 0.0 and dir.length() > 0.1:
+			# drunk: you drift sideways a bit
+			dir = (dir + transform.basis.x * sin(_vt * 1.3) * wobble * 0.45).normalized()
+	var speed: float = [WALK, CROUCH_SPEED, PRONE_SPEED][posture] * speed_mult
 	if sprinting:
-		speed = SPRINT
+		speed = SPRINT * sprint_mult * minf(speed_mult + 0.15, 1.0)
 	velocity.x = dir.x * speed
 	velocity.z = dir.z * speed
 	move_and_slide()
@@ -386,6 +401,8 @@ func _ride(delta: float) -> void:
 	if enabled:
 		thr = float(Input.is_physical_key_pressed(KEY_W)) - float(Input.is_physical_key_pressed(KEY_S))
 		steer = float(Input.is_physical_key_pressed(KEY_A)) - float(Input.is_physical_key_pressed(KEY_D))
+	_vt += delta
+	steer += sin(_vt * 1.7) * wobble * 0.5
 	var sp := riding.speed
 	if thr > 0.0:
 		sp = move_toward(sp, top, 2.6 * delta)
@@ -407,7 +424,7 @@ func _ride(delta: float) -> void:
 	for i in get_slide_collision_count():
 		var c := get_slide_collision(i)
 		if absf(c.get_normal().y) < 0.5:
-			if sp > 3.8:
+			if sp > crash_speed:
 				crash(c.get_collider())
 				return
 			riding.speed = sp * 0.4  # scrape along the wall
@@ -417,6 +434,40 @@ func _ride(delta: float) -> void:
 	camera.rotation.z = lerpf(camera.rotation.z, steer * 0.07 * k, 5.0 * delta)
 	camera.fov = lerpf(camera.fov, 75.0 + sp * 1.4, 4.0 * delta)
 	_vignette.modulate.a = lerpf(_vignette.modulate.a, 0.0, 6.0 * delta)
+
+
+## Umbrella in your left hand (view model): open it with [U].
+func set_umbrella(on: bool) -> void:
+	if on and umbrella == null:
+		umbrella = Node3D.new()
+		umbrella.name = "Umbrella"
+		camera.add_child(umbrella)
+		umbrella.position = Vector3(-0.25, 0.25, -0.35)
+		var canopy := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.02
+		cm.bottom_radius = 0.62
+		cm.height = 0.28
+		cm.radial_segments = 8
+		canopy.mesh = cm
+		var m := StandardMaterial3D.new()
+		m.albedo_color = Color("1d2a44")
+		m.roughness = 0.4
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		canopy.material_override = m
+		canopy.position = Vector3(0.1, 0.42, 0.05)
+		umbrella.add_child(canopy)
+		var shaft := MeshInstance3D.new()
+		var sm := CylinderMesh.new()
+		sm.top_radius = 0.008
+		sm.bottom_radius = 0.008
+		sm.height = 0.8
+		shaft.mesh = sm
+		shaft.material_override = m
+		shaft.position = Vector3(0.1, 0.0, 0.05)
+		umbrella.add_child(shaft)
+	if umbrella:
+		umbrella.visible = on
 
 
 func crash(collider: Object) -> void:

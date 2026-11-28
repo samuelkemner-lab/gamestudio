@@ -47,6 +47,11 @@ var streak := 0
 var last_release_day := -10
 var goals_done: Array = []
 var stats := {"hot_sessions": 0}
+# Vitals: energy 0..100, active effects {name: minutes}, inventory {item: count}, per-night counters
+var energy := 100.0
+var effects := {}
+var items := {}
+var night := {}
 
 const MAMA := ["Are you eating well, jongen? x Mama", "Your aunt says she saw you on the internet. Is that good?",
 	"Sunday dinner at 5. Bring that rapper friend, he looks hungry.", "Did you sleep at all this week? Answer me.",
@@ -374,6 +379,9 @@ func sleep() -> Dictionary:
 	minutes = 22 * 60
 	noise = 0.0
 	booked_today.clear()
+	energy = 100.0
+	effects = {}
+	night = {}
 	pending = {}
 	calls_tonight = 0
 	if estep.owned and estep.home:
@@ -418,6 +426,10 @@ func reset() -> void:
 	last_release_day = -10
 	goals_done = []
 	stats = {"hot_sessions": 0}
+	energy = 100.0
+	effects = {}
+	items = {}
+	night = {}
 	changed.emit()
 
 
@@ -434,6 +446,7 @@ func save() -> void:
 			"inbox": inbox, "call_log": call_log, "furniture": furniture, "placed": placed,
 			"estep": estep, "deliveries": deliveries,
 			"xp": xp, "streak": streak, "last_release_day": last_release_day, "goals_done": goals_done, "stats": stats,
+			"energy": energy, "effects": effects, "items": items, "night": night,
 		}))
 
 
@@ -473,4 +486,9 @@ func load_game() -> void:
 		var stt = d.get("stats", {})
 		if stt is Dictionary:
 			stats.merge(stt, true)
+		energy = float(d.get("energy", 100.0))
+		for key in ["effects", "items", "night"]:
+			var v = d.get(key, {})
+			if v is Dictionary:
+				set(key, v)
 	changed.emit()

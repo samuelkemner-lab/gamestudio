@@ -274,6 +274,43 @@ static func rumble() -> AudioStreamWAV:
 	return _wav(out, true)
 
 
+## Can opening: short hiss.
+static func pssht() -> AudioStreamWAV:
+	var n := int(RATE * 0.35)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		out[i] = (randf() * 2.0 - 1.0) * exp(-t * 9.0) * 0.4 * (1.0 if t > 0.02 else t / 0.02)
+	return _wav(out, false)
+
+
+## Lighter: click + soft flame hiss.
+static func lighter() -> AudioStreamWAV:
+	var n := int(RATE * 0.6)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		lp = lp * 0.9 + (randf() * 2.0 - 1.0) * 0.1
+		var click := sin(TAU * 3000.0 * t) * exp(-t * 200.0) * 0.5
+		out[i] = click + lp * 0.5 * (1.0 if t > 0.08 else 0.0) * exp(-(t - 0.08) * 3.0)
+	return _wav(out, false)
+
+
+## Bottle / gulp: low bubble.
+static func gulp() -> AudioStreamWAV:
+	var n := int(RATE * 0.3)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		var f := 180.0 + 120.0 * sin(t * 30.0)
+		out[i] = sin(TAU * f * t) * exp(-t * 8.0) * 0.4
+	return _wav(out, false)
+
+
 ## Coins / payout jingle.
 static func cash() -> AudioStreamWAV:
 	var n := int(RATE * 0.5)

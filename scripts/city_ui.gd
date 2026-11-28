@@ -13,26 +13,40 @@ const MENUS := {
 		"title": "GROENE WOLK", "color": Color("4ade80"),
 		"intro": "Coffeeshop. 18+ only, the guy at the counter checks your ID twice. It smells like a festival in here.",
 		"items": [
-			{"id": "preroll", "name": "Pre-roll \"Maas Haze\"", "price": 15, "buff": "chill", "amount": 1,
-				"desc": "A chill studio. Your next rapper gets one extra take of patience."},
+			{"id": "preroll", "name": "Pre-roll \"Maas Haze\"", "price": 15, "item": "joint",
+				"desc": "Smoke it with [1]: you walk slower, everything gets warm and muffled, your next rapper gets +1 take. Munchies after."},
 		],
 	},
 	"snackbar": {
 		"title": "SNACKBAR DE HOEK", "color": Color("fbbf24"),
 		"intro": "Ome Kees has been frying since 1987. \"Wat mag het zijn, jongen?\"",
 		"items": [
-			{"id": "kapsalon", "name": "Kapsalon", "price": 9, "buff": "awake", "amount": 60,
-				"desc": "Fries, shawarma, cheese, salad, garlic sauce. You stay awake one hour longer tonight."},
-			{"id": "frikandel", "name": "Frikandel speciaal", "price": 4, "buff": "awake", "amount": 30,
-				"desc": "Curry, mayo, onions. +30 minutes before you pass out."},
+			{"id": "kapsalon", "name": "Kapsalon", "price": 9, "buff": "awake", "amount": 60, "food": "big",
+				"desc": "Fries, shawarma, cheese, salad, garlic sauce. Awake one hour longer, munchies gone. Food coma for a bit."},
+			{"id": "frikandel", "name": "Frikandel speciaal", "price": 4, "buff": "awake", "amount": 30, "food": "small",
+				"desc": "Curry, mayo, onions. +30 minutes before you pass out, munchies gone."},
 		],
 	},
 	"nightshop": {
 		"title": "NACHTWINKEL", "color": Color("f472b6"),
 		"intro": "Open 24/7. Fluorescent lights, a cat on the counter, and a guy who has seen everything.",
 		"items": [
-			{"id": "energy", "name": "Energy drink", "price": 3, "buff": "awake", "amount": 30,
-				"desc": "Tastes like a battery. +30 minutes awake tonight."},
+			{"id": "raket", "name": "RAKET energy drink", "price": 3, "item": "raket",
+				"desc": "[2] Sprint 35% faster, +30 energy, awake longer. Then you crash. Three cans = heart racing."},
+			{"id": "pils", "name": "Pils (can)", "price": 2, "item": "pils",
+				"desc": "[3] Courage at the open mic and with excuses. Wobbly walking. Never ride your step after a few."},
+			{"id": "water", "name": "Water", "price": 1, "item": "water",
+				"desc": "[4] Sobers you up, ends the crash."},
+			{"id": "brood", "name": "Bread", "price": 1, "item": "brood",
+				"desc": "[5] Feed the pigeons. They'll follow you around."},
+			{"id": "kraslot", "name": "Scratch card \"Maas Miljoen\"", "price": 2, "item": "kraslot",
+				"desc": "[6] Odds: €2 1 in 5 · €5 1 in 25 · €20 1 in 100 · €100 1 in 500 · €1000 1 in 10,000. Pays back ~55%."},
+			{"id": "keelspray", "name": "Throat spray", "price": 4, "item": "keelspray",
+				"desc": "Give it to a rapper before a take (talk to them): +5 on that take."},
+			{"id": "hengel", "name": "Telescopic fishing rod", "price": 15, "item": "hengel",
+				"desc": "Fish at the quay railing. Eels, bikes, and sometimes something very interesting."},
+			{"id": "paraplu", "name": "Umbrella", "price": 12, "item": "paraplu",
+				"desc": "[U] open/close. Rain stops draining your energy."},
 			{"id": "stroopwafels", "name": "Stroopwafels for the neighbours", "price": 8, "buff": "gift", "amount": 1,
 				"desc": "A peace offering. Noise meter back to zero, and it rises 30% slower tonight."},
 		],
@@ -191,13 +205,25 @@ func _menu(m: Dictionary) -> void:
 		var b := UIKit.button("BUY  €%d" % it.price, Color(m.color).darkened(0.45), 15)
 		b.custom_minimum_size.x = 120
 		var maxed := _buff_maxed(it)
-		if maxed:
+		if it.has("item"):
+			var have := Vitals.count(game, str(it.item))
+			maxed = have >= int(Vitals.ITEMS[it.item].max)
+			b.text = "BUY  €%d" % it.price if not maxed else ("HAVE IT" if int(Vitals.ITEMS[it.item].max) == 1 else "FULL")
+			if have > 0 and not maxed:
+				b.text += "  (%d)" % have
+		elif maxed:
 			b.text = "HAVE IT"
 		b.disabled = maxed or game.money < int(it.price)
 		b.pressed.connect(func():
 			if game.spend(int(it.price)):
-				game.add_buff(str(it.buff), int(it.amount))
-				message.emit(_buff_text(it))
+				if it.has("item"):
+					Vitals.add_item(game, str(it.item))
+					message.emit("%s in your pocket." % str(Vitals.ITEMS[it.item].name))
+				else:
+					game.add_buff(str(it.buff), int(it.amount))
+					if it.has("food"):
+						Vitals.eat(game, str(it.food) == "big")
+					message.emit(_buff_text(it))
 				open(shop_id, game))
 		_row(str(it.name), str(it.desc), b)
 	var status := _status_text()
@@ -206,7 +232,7 @@ func _menu(m: Dictionary) -> void:
 
 
 func _buff_maxed(it: Dictionary) -> bool:
-	match str(it.buff):
+	match str(it.get("buff", "")):
 		"chill":
 			return int(game.buffs.chill) >= 1
 		"awake":
@@ -217,7 +243,7 @@ func _buff_maxed(it: Dictionary) -> bool:
 
 
 func _buff_text(it: Dictionary) -> String:
-	match str(it.buff):
+	match str(it.get("buff", "")):
 		"chill":
 			return "In your pocket. The next rapper will be extra patient."
 		"awake":

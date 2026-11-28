@@ -43,7 +43,14 @@ var transit: Transit
 var _talk_mode := ""  # "" (people) | metro | tram | food | club
 var _tram_entry := {}
 var _tram_builder: CityBuilder
-var _pending_ride := {}  # chosen destination, waiting for "check in or not"
+var _pending_ride := {}
+var umbrella_open := false
+var _sprint_secs := 0.0
+var _hotbar: Label
+var _energy_bar: ProgressBar
+var _tint: ColorRect
+var _lpf_idx := -1
+var _lpf: AudioEffectLowPassFilter  # chosen destination, waiting for "check in or not"
 const DISTRICT_ORIGINS := {"centraal": Vector3(0, 0, 1500), "markt": Vector3(0, 0, 2200), "haven": Vector3(0, 0, 2900)}
 const METRO_ORIGIN := Vector3(0, -80, 3600)
 var _monitor_vp: SubViewport
@@ -198,6 +205,11 @@ func _ready() -> void:
 	results.visible = false
 	results.closed.connect(_on_results_closed)
 
+	_lpf = AudioEffectLowPassFilter.new()
+	_lpf.cutoff_hz = 20000.0
+	AudioServer.add_bus_effect(0, _lpf)
+	_lpf_idx = AudioServer.get_bus_effect_count(0) - 1
+	AudioServer.set_bus_effect_enabled(0, _lpf_idx, false)
 	game.changed.connect(_update_stats)
 	_update_stats()
 	if game.inbox.is_empty():
@@ -273,12 +285,16 @@ func _tick_clock(delta: float) -> void:
 		_check_pending()
 		_maybe_call()
 		game.check_goals()
+		_vitals_tick()
 	var line := "DAY %d   ·   %s   ·   %s" % [game.day, game.clock_text(), area_title()]
 	if player and player.riding:
 		line += "\nE-STEP  %d km/h  ·  battery %d%%" % [int(round(player.riding.speed * 3.6)), int(ceil(float(game.estep.battery)))]
 	if not zoef.is_empty():
 		var left := int(zoef.until) - game.minutes
 		line += "\nZOEF  ·  %s  ·  %s" % [("deliver to " + str(zoef.address)) if zoef.picked else "pick up at Snackbar De Hoek", ("%d:%02d left" % [left / 60, left % 60]) if left >= 0 else "LATE"]
+	var fx := Vitals.status_text(game)
+	if fx != "":
+		line += "\n" + fx
 	if not game.pending.is_empty():
 		line += "\n%s arrives at %s" % [Rappers.by_id(str(game.pending.rapper)).get("name", "?"), game.clock_text_at(int(game.pending.until))]
 	clock_label.text = line
@@ -474,6 +490,7 @@ func _talk_rapper() -> void:
 		["What do you want on this beat?", "brief"],
 		["Hype them up  (+5 on next take)", "hype", session.hype == 0],
 		["Offer a cold drink  (+1 take)" if game.placed.get("front", "") == "mini_fridge" else "Offer a drink  (needs a mini fridge)", "drink", not session.drink_given and game.placed.get("front", "") == "mini_fridge"],
+		["Give throat spray  (+5 on next take, %d left)" % Vitals.count(game, "keelspray"), "spray", Vitals.count(game, "keelspray") > 0],
 		["Small talk", "chat"],
 	])
 	_set_ui_mode(true)
@@ -505,6 +522,10 @@ func _on_talk_chosen(id: String) -> void:
 				show_toast("+1 take (%d left)" % session.takes_left)
 			"chat":
 				n.say(StreetTalk.rapper_chat(session.rapper), 4.5)
+			"spray":
+				if Vitals.take(game, "keelspray"):
+					session.hype += 5
+					n.say(StreetTalk._pick(["*sprays* Ahh, smooth. Okay, I'm ready.", "Honey-lemon? Respect. Voice is clean now.", "*cough* ...okay that actually helps."]), 3.0)
 		_talk_npc = null
 		return
 	match id:
@@ -1022,6 +1043,138 @@ func _play_fx_ping() -> void:
 	_play_sfx(AmbienceSynth.ping())
 
 
+# ---------- Vitals: energy, consumables, effects ----------
+
+func use_item(id: String) -> void:
+	if Vitals.count(game, id) <= 0:
+		show_toast("No %s in your pocket. (Night shop / coffeeshop)" % str(Vitals.ITEMS[id].name).to_lower())
+		return
+	match id:
+		"kraslot":
+			Vitals.take(game, "kraslot")
+			scratch_card()
+			return
+		"brood":
+			var flock := _nearest_flock()
+			if flock and flock.feed(35.0):
+				Vitals.take(game, "brood")
+				show_toast("You crumble the bread. The pigeons decide you're their new best friend.")
+				return
+	var line := Vitals.use(game, id)
+	_play_sfx({"joint": AmbienceSynth.lighter(), "raket": AmbienceSynth.pssht(), "pils": AmbienceSynth.gulp(), "water": AmbienceSynth.gulp()}.get(id, AmbienceSynth.gulp()))
+	show_toast(line)
+
+
+func _nearest_flock() -> PigeonFlock:
+	if area != "zuidkade":
+		return null
+	for f in city.flocks:
+		if f.global_position.distance_to(player.global_position) < 9.0:
+			return f
+	return null
+
+
+func toggle_umbrella() -> void:
+	if Vitals.count(game, "paraplu") <= 0:
+		show_toast("You don't have an umbrella. (Night shop, €12)")
+		return
+	umbrella_open = not umbrella_open
+	player.set_umbrella(umbrella_open)
+
+
+## Maas Miljoen scratch card: odds printed on the back, pays back about 55%.
+func scratch_card(r := -1.0) -> int:
+	var v := randf() if r < 0.0 else r
+	var prize := 0
+	if v < 0.0001:
+		prize = 1000
+	elif v < 0.0021:
+		prize = 100
+	elif v < 0.0121:
+		prize = 20
+	elif v < 0.0521:
+		prize = 5
+	elif v < 0.2521:
+		prize = 2
+	var syms := ["€2", "€5", "€20", "€100", "€1000"]
+	var shown: Array = []
+	if prize > 0:
+		shown = ["€%d" % prize, "€%d" % prize, "€%d" % prize]
+	else:
+		shown = [syms[randi() % 5], syms[randi() % 5], syms[randi() % 5]]
+		if shown[0] == shown[1] and shown[1] == shown[2]:
+			shown[2] = syms[(syms.find(shown[2]) + 1) % 5]
+	game.stats.scratch_spent = int(game.stats.get("scratch_spent", 0)) + 2
+	if prize > 0:
+		game.add(prize, 0, 0)
+		game.stats.scratch_won = int(game.stats.get("scratch_won", 0)) + prize
+		_play_sfx(AmbienceSynth.cash())
+	if not DisplayServer.get_name() == "headless":
+		_talk_npc = null
+		_talk_mode = "scratch"
+		talk_ui.open("Maas Miljoen", "[ %s ]   [ %s ]   [ %s ]" % shown, [["You win €%d!" % prize if prize > 0 else "Nothing. Next time...", "ok"]])
+		_set_ui_mode(true)
+	return prize
+
+
+func _vitals_tick() -> void:
+	var outdoors := in_city and area != "metro"
+	var wet := outdoors and game.weather == "rain" and not umbrella_open and not transit.is_riding()
+	var events := Vitals.tick(game, wet, _sprint_secs)
+	_sprint_secs = 0.0
+	for e in events:
+		match e:
+			"munchies":
+				show_toast("The munchies hit. You need food. (Snackbar, döner, bread...)")
+			"crash":
+				show_toast("The RAKET wears off. Your legs feel like concrete. (Water helps)")
+			"tired":
+				show_toast("You're running on fumes. Coffee, RAKET or food. Or bed.")
+	# drunk on a step near the police car by the casino
+	if area == "zuidkade" and player.riding and Vitals.drunk_level(game) > 0.3 and not game.night.get("dui", false):
+		if city.to_local(player.global_position).distance_to(Vector3(-38.5, 0, 4.7)) < 14.0:
+			game.night.dui = true
+			player.dismount()
+			_fine(80, -1)
+			show_toast("Officer Dekker: \"Off the step. You're drunk.\" €80 fine.  −1 REP")
+
+
+func _apply_vitals(delta: float) -> void:
+	if player == null:
+		return
+	if player.sprinting:
+		_sprint_secs += delta
+	var m := Vitals.mods(game)
+	player.speed_mult = m.walk
+	player.sprint_mult = m.sprint
+	player.can_sprint = m.can_sprint
+	player.sway = m.sway
+	player.wobble = m.wobble
+	player.shake = m.shake
+	player.crash_speed = 2.5 if Vitals.drunk_level(game) > 0.3 else 3.8
+	var tint: Color = m.tint
+	if Vitals.has(game, "heart"):
+		tint.a *= 0.6 + 0.4 * sin(_t * 9.0)
+	_tint.color = _tint.color.lerp(tint, clampf(delta * 2.0, 0.0, 1.0))
+	var lp: float = m.lowpass
+	AudioServer.set_bus_effect_enabled(0, _lpf_idx, lp > 0.0)
+	if lp > 0.0:
+		_lpf.cutoff_hz = lp
+	_energy_bar.value = game.energy
+	var fill := _energy_bar.get_theme_stylebox("fill") as StyleBoxFlat
+	if fill:
+		fill.bg_color = Color("ff3d4a").lerp(Color("3ddc84"), game.energy / 100.0)
+	var parts: Array = []
+	for i in Vitals.HOTBAR.size():
+		var id: String = Vitals.HOTBAR[i]
+		var n := Vitals.count(game, id)
+		if n > 0:
+			parts.append("%d %s ×%d" % [i + 1, Vitals.ITEMS[id].name, n])
+	if Vitals.count(game, "paraplu") > 0:
+		parts.append("U umbrella%s" % (" (open)" if umbrella_open else ""))
+	_hotbar.text = "   ".join(parts)
+
+
 # ---------- Metro & tram ----------
 
 func fade_through(f: Callable) -> void:
@@ -1122,10 +1275,13 @@ func _on_menu_choice(mode: String, id: String) -> void:
 			var cost := 6 if id == "doner" else 9
 			if game.spend(cost):
 				game.add_buff("awake", 45 if id == "doner" else 60)
+				Vitals.eat(game, true)
 				_play_sfx(AmbienceSynth.cash())
 				show_toast("%s. You'll stay up %d min longer tonight." % ["Döner box" if id == "doner" else "Kapsalon", 45 if id == "doner" else 60])
 		"club":
 			_club(id)
+		"scratch":
+			pass
 
 
 func _checkin_menu(kind: String, dest: String) -> void:
@@ -1196,7 +1352,7 @@ func _resolve_inspection(choice: String) -> void:
 				insp.say("Here's your fine. Next time: check in.", 3.0)
 			show_toast("Fined €%d for riding without checking in." % Transit.FINE)
 		"excuse":
-			var odds := minf(0.3 + game.street_cred * 0.01, 0.6)
+			var odds := minf(0.3 + game.street_cred * 0.01 + (0.15 if Vitals.has(game, "drunk") else 0.0), 0.7)
 			if randf() < odds:
 				if insp:
 					insp.say("Hmm. Fine. Just this once. Check in next time.", 3.5)
@@ -1257,12 +1413,18 @@ func _district_shop(id: String) -> void:
 			_talk_mode = "club"
 			talk_ui.open("Club De Kraan", "Open mic tonight  ·  entry €10  ·  you have €%d" % game.money, [
 				["Perform at the open mic (€10)" if not done_tonight else "You already performed tonight", "openmic", game.money >= 10 and not done_tonight],
-				["Just dance for a bit (€10, chill: +1 take next session)", "dance", game.money >= 10]])
+				["Just dance for a bit (€10, chill: +1 take next session)", "dance", game.money >= 10],
+				["Pils at the bar (€4)", "pils", game.money >= 4]])
 			_set_ui_mode(true)
 
 
 ## Open mic: the crowd reacts to your best release and your level.
 func _club(id: String) -> int:
+	if id == "pils":
+		if game.spend(4):
+			show_toast(Vitals.use(game, "pils", true))
+			_play_sfx(AmbienceSynth.gulp())
+		return 0
 	if not game.spend(10):
 		return 0
 	if id == "dance":
@@ -1276,7 +1438,7 @@ func _club(id: String) -> int:
 	if best == 0:
 		show_toast("You have nothing released yet. The crowd talks right over your set.")
 		return 0
-	var score := best * 18 + game.level() * 3 + randi() % 20
+	var score := best * 18 + game.level() * 3 + randi() % 20 + Vitals.stage_bonus(game)
 	var rep := 0
 	var cred := 0
 	var tips := 0
@@ -1310,8 +1472,9 @@ func _district_spot(kind: String) -> void:
 		"kiosk":
 			if game.spend(3):
 				game.add_buff("awake", 30)
+				Vitals.coffee(game)
 				_play_sfx(AmbienceSynth.cash())
-				show_toast("Black coffee from the kiosk. +30 min before you crash.")
+				show_toast("Black coffee from the kiosk. +30 min, +20 energy.%s" % ("  (that's a lot of coffee: jittery)" if Vitals.has(game, "jitter") else ""))
 			else:
 				show_toast("Coffee is €3. You're broke.")
 		"busk":
@@ -1512,12 +1675,39 @@ func _build_hud() -> void:
 	noise_bar.add_theme_stylebox_override("fill", UIKit.box(UIKit.CYAN, 4, Color(), 0, 0))
 	noise_bar.tooltip_text = "Noise: the neighbours are listening"
 	scol.add_child(noise_bar)
+	_energy_bar = ProgressBar.new()
+	_energy_bar.max_value = 100
+	_energy_bar.show_percentage = false
+	_energy_bar.custom_minimum_size = Vector2(0, 8)
+	_energy_bar.add_theme_stylebox_override("background", UIKit.box(Color(1, 1, 1, 0.08), 4, Color(), 0, 0))
+	_energy_bar.add_theme_stylebox_override("fill", UIKit.box(Color("3ddc84"), 4, Color(), 0, 0))
+	scol.add_child(_energy_bar)
+	var energy_lbl := UIKit.label("energy", 11, UIKit.DIM)
+	energy_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	scol.add_child(energy_lbl)
 	var noise_lbl := UIKit.label("noise", 11, UIKit.DIM)
 	noise_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	scol.add_child(noise_lbl)
 	clock_label = UIKit.label("", 14, UIKit.CYAN)
 	clock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	scol.add_child(clock_label)
+
+	_hotbar = UIKit.label("", 14, Color(0.9, 0.88, 1.0, 0.85))
+	_hotbar.add_theme_color_override("font_outline_color", Color(0.03, 0.02, 0.07))
+	_hotbar.add_theme_constant_override("outline_size", 6)
+	_hotbar.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	_hotbar.offset_left = 24
+	_hotbar.offset_top = -44
+	_hotbar.offset_bottom = -20
+	hud.add_child(_hotbar)
+	var tint_layer := CanvasLayer.new()
+	tint_layer.layer = -1
+	add_child(tint_layer)
+	_tint = ColorRect.new()
+	_tint.color = Color(0, 0, 0, 0)
+	_tint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tint.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	tint_layer.add_child(_tint)
 
 	crosshair = UIKit.label("·", 28, Color(1, 1, 1, 0.8))
 	crosshair.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

@@ -8,6 +8,15 @@ var birds: Array = []  # [{node, wings:[l,r], home, vel, state}]
 var _t := 0.0
 var _away := 0.0
 var _flap: AudioStreamPlayer3D
+var fed := 0.0  # seconds left: they follow you and peck around your feet
+
+
+## Throw bread: for a while they trust you, gather at your feet and follow you around.
+func feed(seconds := 30.0) -> bool:
+	if _away > 0.0:
+		return false
+	fed = seconds
+	return true
 
 
 func build(count: int, radius: float) -> void:
@@ -107,6 +116,21 @@ func _process(delta: float) -> void:
 		head.position = Vector3(0, 0.17 - peck * 0.09, 0.07 + peck * 0.05)
 		if sin(_t * 0.7 + b.phase) > 0.995:
 			n.rotation.y += randf_range(-1.2, 1.2)
+	if fed > 0.0 and player and is_instance_valid(player):
+		fed -= delta
+		var target := to_local(player.global_position)
+		for b in birds:
+			var n: Node3D = b.node
+			var spot: Vector3 = target + Vector3(cos(b.phase * 2.0), 0, sin(b.phase * 2.0)) * (0.8 + fmod(b.phase, 0.7))
+			spot.y = 0.0
+			var to := spot - n.position
+			if to.length() > 0.15:
+				n.position += to.normalized() * minf(to.length(), 1.6 * delta)
+				n.rotation.y = lerp_angle(n.rotation.y, atan2(to.x, to.z), 6.0 * delta)
+		if fed <= 0.0:
+			for b in birds:
+				b.home = (b.node as Node3D).position  # they settle where you left them
+		return
 	if player and is_instance_valid(player):
 		var d := global_position.distance_to(player.global_position)
 		var running: bool = "sprinting" in player and player.sprinting

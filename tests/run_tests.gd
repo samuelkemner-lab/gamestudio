@@ -815,5 +815,93 @@ func _run() -> void:
 	main.travel(false)
 	check(main.area == "room" and main.room.visible and not mk.visible, "travel home from a district")
 
+	# ---------- v0.13: energy, consumables, effects ----------
+	gs.reset()
+	sess.state = Session.State.IDLE
+	main.travel(true)
+	gs.money = 500
+	check(is_equal_approx(gs.energy, 100.0), "full energy at the start of the night")
+	main.open_shop("nightshop")
+	check(main.city_ui.visible, "night shop sells the new stuff")
+	main.city_ui.close()
+	for id in ["joint", "raket", "pils", "water", "brood", "kraslot", "keelspray", "paraplu"]:
+		Vitals.add_item(gs, id, 2)
+	check(Vitals.count(gs, "paraplu") == 1, "tools: only one umbrella")
+	# joint
+	main.use_item("joint")
+	main._apply_vitals(0.1)
+	check(Vitals.has(gs, "high") and pl.speed_mult < 0.8 and int(gs.buffs.chill) == 1 and AudioServer.is_bus_effect_enabled(0, main._lpf_idx), "joint: slow, muffled, +1 take")
+	for k in Vitals.HIGH:
+		Vitals.tick(gs)
+	check(not Vitals.has(gs, "high") and Vitals.has(gs, "munchies"), "high wears off → munchies")
+	Vitals.eat(gs, true)
+	check(not Vitals.has(gs, "munchies") and Vitals.has(gs, "coma"), "food kills the munchies (food coma)")
+	# raket
+	var e0 := gs.energy
+	main.use_item("raket")
+	main._apply_vitals(0.1)
+	check(Vitals.has(gs, "raket") and pl.sprint_mult > 1.3 and gs.energy > e0, "RAKET: sprint faster, +energy")
+	for k in Vitals.RAKET:
+		Vitals.tick(gs)
+	main._apply_vitals(0.1)
+	check(Vitals.has(gs, "crash") and not pl.can_sprint and pl.speed_mult < 1.0, "RAKET wears off → crash (no sprint)")
+	main.use_item("water")
+	check(not Vitals.has(gs, "crash"), "water ends the crash")
+	Vitals.use(gs, "raket", true)
+	Vitals.use(gs, "raket", true)
+	check(Vitals.has(gs, "heart"), "three cans: heart racing")
+	# pils
+	main.use_item("pils")
+	main.use_item("pils")
+	main._apply_vitals(0.1)
+	check(Vitals.drunk_level(gs) > 0.5 and pl.wobble > 0.5 and pl.crash_speed < 3.8, "two pils: wobbly, step crashes sooner")
+	check(Vitals.stage_bonus(gs) == 10, "1–2 beers: courage at the open mic")
+	gs.night.beers = 3
+	check(Vitals.stage_bonus(gs) == -10, "3+ beers: you slur")
+	main.use_item("water")
+	check(Vitals.drunk_level(gs) < 0.5, "water sobers you up")
+	# energy drains, sprinting costs, rain without umbrella costs more
+	gs.energy = 50.0
+	Vitals.tick(gs, false, 0.0)
+	var dry_drain := 50.0 - gs.energy
+	gs.energy = 50.0
+	Vitals.tick(gs, true, 0.0)
+	check(50.0 - gs.energy > dry_drain, "rain without an umbrella drains energy faster")
+	gs.effects.erase("raket")
+	gs.energy = 50.0
+	Vitals.tick(gs, false, 1.0)
+	check(50.0 - gs.energy > dry_drain + 0.2, "sprinting costs energy")
+	gs.energy = 3.0
+	main._apply_vitals(0.1)
+	check(not pl.can_sprint and pl.speed_mult < 0.75, "exhausted: slow, no sprint")
+	main.toggle_umbrella()
+	check(main.umbrella_open and pl.umbrella != null and pl.umbrella.visible, "umbrella opens")
+	main.toggle_umbrella()
+	# scratch cards (odds) + pigeons + throat spray
+	check(main.scratch_card(0.00005) == 1000 and main.scratch_card(0.001) == 100 and main.scratch_card(0.5) == 0, "scratch card prize table")
+	var rng_win := 0
+	for k in 20000:
+		rng_win += main.scratch_card()
+	var scratch_rtp := rng_win / (20000.0 * 2.0)
+	check(scratch_rtp > 0.4 and scratch_rtp < 0.7, "scratch cards pay back ~55%% (%.0f%%)" % (scratch_rtp * 100.0))
+	var fl2: PigeonFlock = city.flocks[0]
+	fl2._away = 0.0
+	pl.global_position = fl2.global_position + Vector3(2.0, 0, 2.0)
+	main.use_item("brood")
+	check(fl2.fed > 0.0, "bread near pigeons: they follow you")
+	gs.night = {}
+	sess.book(Rappers.LIL_TEAR)
+	sess.state = Session.State.WAITING
+	main._on_interacted(sess.npc.body)
+	main.talk_ui.choose("spray")
+	check(sess.hype == 5 and Vitals.count(gs, "keelspray") == 1, "throat spray: +5 on the next take")
+	sess._leave()
+	sess.state = Session.State.IDLE
+	gs.sleep()
+	main.results.visible = false
+	main._set_ui_mode(false)
+	check(is_equal_approx(gs.energy, 100.0) and gs.effects.is_empty(), "sleep resets energy and effects")
+	main.travel(false)
+
 	print("RESULT: ", "PASS" if failures == 0 else "FAIL (%d)" % failures)
 	quit(failures)

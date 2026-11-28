@@ -940,5 +940,40 @@ func _run() -> void:
 	main.city_ui.close()
 	main.travel(false)
 
+	# ---------- style: barber, Drip Depot, bouncer ----------
+	var mkt: DistrictBuilder = main.districts.markt
+	check(mkt.features.has("barber") and mkt.features.has("drip"), "Fresh Fades and Drip Depot on the Marktplein")
+	gs.money = 500
+	gs.clothes = []
+	gs.outfit = {}
+	gs.stats.erase("fresh_until")
+	check(Style.drip(gs) == 0, "no drip in your old clothes")
+	check(Style.haircut(gs, "fade") and Style.fresh(gs) == 2, "fresh fade: +2 drip")
+	check(Style.buy_or_wear(gs, "puffer") and Style.drip(gs) == 7 and "puffer" in gs.clothes, "buy a puffer: it goes straight on")
+	Style.buy_or_wear(gs, "black_hoodie")
+	check(gs.outfit.top == "black_hoodie" and Style.drip(gs) == 4, "one top at a time: the hoodie replaces the puffer")
+	var m_wear := gs.money
+	Style.buy_or_wear(gs, "puffer")
+	check(gs.money == m_wear and gs.outfit.top == "puffer", "putting on something you own is free")
+	check(is_equal_approx(Style.pay_mult(gs), 1.07), "drip makes rappers pay a little more (+1%/point)")
+	gs.day += 2
+	check(Style.fresh(gs) == 0, "a fade grows out after 2 nights")
+	gs.day -= 2
+	gs.outfit = {}
+	gs.stats.erase("fresh_until")
+	gs.minutes = 23 * 60 + 30
+	main._district_shop("club")
+	check(main._talk_mode == "bouncer", "bouncer stops you without drip")
+	main._on_talk_chosen("bribe")
+	check(int(gs.stats.get("club_pass_day", -1)) == gs.day and main._talk_mode == "club", "slip him a tenner: you're in")
+	main._on_talk_chosen("pils")
+	gs.stats.erase("club_pass_day")
+	gs.outfit = {"top": "puffer"}
+	main._district_shop("club")
+	check(main._talk_mode == "club", "dressed right: straight in")
+	main.talk_ui.close()
+	main._set_ui_mode(false)
+	main._talk_mode = ""
+
 	print("RESULT: ", "PASS" if failures == 0 else "FAIL (%d)" % failures)
 	quit(failures)

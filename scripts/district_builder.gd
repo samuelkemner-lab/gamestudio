@@ -9,7 +9,7 @@ extends CityBuilder
 
 const D_MIN := -56.0
 const D_MAX := 56.0
-const D_HOURS := {"kiosk": 99999, "huisraad_store": 26 * 60, "doner": 29 * 60, "club": 29 * 60}
+const D_HOURS := {"kiosk": 99999, "huisraad_store": 26 * 60, "doner": 29 * 60, "club": 29 * 60, "barber": 25 * 60, "drip": 26 * 60}
 const NAMES := {"centraal": "Centraal", "markt": "Marktplein", "haven": "Havenkwartier"}
 
 var district := ""
@@ -51,6 +51,8 @@ func build_district(id: String) -> void:
 
 func _process(delta: float) -> void:
 	_drive(delta)
+	if _pole:
+		_pole.rotate_y(delta * 1.6)
 	if _rain and player and is_instance_valid(player):
 		_rain.global_position = player.global_position + Vector3(0, 9.0, 0)
 	_react_t -= delta
@@ -320,12 +322,15 @@ func _centraal() -> void:
 func _markt() -> void:
 	_row([[-48.0, 14.0, 5, "prewar", ""], [-34.0, 14.0, 4, "plaster", ""], [32.0, 14.0, 5, "plaster", ""], [47.0, 16.0, 6, "wederopbouw", ""]], -1)
 	_row([[-46.0, 18.0, 5, "wederopbouw", ""], [-26.0, 16.0, 4, "prewar", "huisraad_store"], [-10.0, 12.0, 4, "plaster", "doner"],
-		[8.0, 16.0, 5, "prewar", ""], [26.0, 14.0, 4, "wederopbouw", ""], [44.0, 18.0, 5, "plaster", ""]], 1)
+		[8.0, 16.0, 5, "prewar", "barber"], [26.0, 14.0, 4, "wederopbouw", "drip"], [44.0, 18.0, 5, "plaster", ""]], 1)
 	_flush_facade_batches(pbr("Concrete034", 1.5, Color(0.78, 0.76, 0.72), 0.0, 0.4, 0.5))
 	_fill_ends(-1)
 	_fill_ends(1)
 	_shopfront("huisraad_store", "HUISRAAD", "MEUBELS · LAMPEN · KLEDEN", -26.0, 1, 16.0, Color("e0a43a"), Color("ffe2a8"))
 	_shopfront("doner", "DONER PALACE", "DÖNER · DURUM · KAPSALON", -10.0, 1, 12.0, Color("ff5a3d"), Color("ffd0a0"))
+	_shopfront("barber", "FRESH FADES", "KNIPPEN · FADES · LINE-UPS", 8.0, 1, 16.0, Color("3ab8ff"), Color("d8f0ff"))
+	_shopfront("drip", "DRIP DEPOT", "STREETWEAR · SNEAKERS · CHAINS", 26.0, 1, 14.0, Color("ff3aa0"), Color("ffd0e8"))
+	_barber_pole(Vector3(8.0 - 7.4, 2.4, LINE - 0.35))
 	# market hall: a huge arch, its glass end wall glowing with the painted ceiling inside
 	var g := group("MarketHall")
 	var arch := cyl(17.0, 46.0)
@@ -363,6 +368,27 @@ func _markt() -> void:
 	tram_stop_x = 4.0
 	tram4 = _tram(tram_stop_x, -100.0, "4  ZUIDKADE")
 	_tram_shelter(tram_stop_x, 1, "Marktplein")
+
+
+## A spinning barber pole next to the door: glowing stripes that turn around a white cylinder.
+var _pole: Node3D
+
+
+func _barber_pole(pos: Vector3) -> void:
+	_pole = Node3D.new()
+	_pole.position = pos
+	add_child(_pole)
+	var c := cyl(0.09, 0.9)
+	part(_pole, c, Vector3.ZERO, glow(Color("f2f2f2"), 0.6))
+	for k in 6:
+		var stripe := MeshInstance3D.new()
+		stripe.mesh = box(Vector3(0.2, 0.06, 0.2))
+		stripe.material_override = glow([Color("e0302a"), Color("2f6bff")][k % 2], 1.2)
+		stripe.position = Vector3(0, -0.4 + k * 0.16, 0)
+		stripe.rotation_degrees = Vector3(0, k * 30.0, 25)
+		_pole.add_child(stripe)
+	part(_pole, cyl(0.12, 0.08), Vector3(0, 0.5, 0), mat(Color("c8c8c8"), 0.3, ""))
+	part(_pole, cyl(0.12, 0.08), Vector3(0, -0.5, 0), mat(Color("c8c8c8"), 0.3, ""))
 
 
 # ================= Havenkwartier =================

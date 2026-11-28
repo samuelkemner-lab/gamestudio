@@ -1541,7 +1541,7 @@ func _smokers() -> void:
 
 ## People recognise you once you have a name in the scene.
 func _greet() -> void:
-	if not game or not player or game.reputation < 10:
+	if not game or not player or game.reputation + Style.drip(game) < 10:
 		return
 	for p in pedestrians:
 		if not p.visible or _greeted.has(p.name):
@@ -1549,6 +1549,10 @@ func _greet() -> void:
 		if p.global_position.distance_to(player.global_position) < 3.2:
 			_greeted[p.name] = true
 			var lines := ["Yo! You're the producer from Kade 17, right?", "Bro, that last track is on my playlist.", "Kade 17! When are you dropping again?", "My cousin says you made that beat. Respect."]
+			if Style.drip(game) >= 6:
+				lines += ["Nice fit, bro. Where'd you get that?", "Look at you. Dressed like you already went platinum."]
+			if game.reputation < 10:
+				lines = ["Nice fit, bro. Where'd you get that?", "Ey, fresh fade. Who cut that?", "You look like you make music or something."]
 			p.say(lines[randi() % lines.size()], 3.5)
 
 

@@ -52,6 +52,10 @@ var energy := 100.0
 var effects := {}
 var items := {}
 var night := {}
+# Style + side records: owned clothes, worn outfit {slot: id}, personal bests {trial: secs, arcade: score}
+var clothes: Array = []
+var outfit := {}
+var records := {}
 
 const MAMA := ["Are you eating well, jongen? x Mama", "Your aunt says she saw you on the internet. Is that good?",
 	"Sunday dinner at 5. Bring that rapper friend, he looks hungry.", "Did you sleep at all this week? Answer me.",
@@ -430,6 +434,9 @@ func reset() -> void:
 	effects = {}
 	items = {}
 	night = {}
+	clothes = []
+	outfit = {}
+	records = {}
 	changed.emit()
 
 
@@ -447,6 +454,7 @@ func save() -> void:
 			"estep": estep, "deliveries": deliveries,
 			"xp": xp, "streak": streak, "last_release_day": last_release_day, "goals_done": goals_done, "stats": stats,
 			"energy": energy, "effects": effects, "items": items, "night": night,
+			"clothes": clothes, "outfit": outfit, "records": records,
 		}))
 
 
@@ -487,7 +495,8 @@ func load_game() -> void:
 		if stt is Dictionary:
 			stats.merge(stt, true)
 		energy = float(d.get("energy", 100.0))
-		for key in ["effects", "items", "night"]:
+		clothes = d.get("clothes", [])
+		for key in ["effects", "items", "night", "outfit", "records"]:
 			var v = d.get(key, {})
 			if v is Dictionary:
 				set(key, v)

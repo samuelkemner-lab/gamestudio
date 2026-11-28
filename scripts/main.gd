@@ -1366,6 +1366,19 @@ func _on_menu_choice(mode: String, id: String) -> void:
 			_club(id)
 		"scratch":
 			pass
+		"barber":
+			if Style.haircut(game, id):
+				_play_sfx(AmbienceSynth.cash())
+				show_toast("%s. Drip %d now. People will notice." % [Style.CUTS[id].name, Style.drip(game)])
+		"drip":
+			if Style.buy_or_wear(game, id):
+				_play_sfx(AmbienceSynth.cash())
+				_drip_menu()
+		"bouncer":
+			if id == "bribe" and game.spend(10):
+				game.stats.club_pass_day = game.day
+				show_toast("Mo pockets it without looking. \"Go on then.\"")
+				_district_shop("club")
 
 
 func _checkin_menu(kind: String, dest: String) -> void:
@@ -1488,9 +1501,27 @@ func _district_shop(id: String) -> void:
 				["Döner box  (€6, stay up 45 min longer)", "doner", game.money >= 6],
 				["Kapsalon  (€9, stay up 60 min longer)", "kapsalon", game.money >= 9]])
 			_set_ui_mode(true)
+		"barber":
+			_talk_npc = null
+			_talk_mode = "barber"
+			var f := Style.fresh(game)
+			talk_ui.open("Fresh Fades", ("You still look fresh (+%d drip)" % f if f > 0 else "Walk-ins welcome") + "  ·  you have €%d" % game.money, [
+				["Fresh fade  (€%d, +%d drip for %d nights, +1 REP)" % [Style.CUTS.fade.price, Style.CUTS.fade.drip, Style.CUTS.fade.nights], "fade", game.money >= int(Style.CUTS.fade.price)],
+				["Quick line-up  (€%d, +%d drip tonight)" % [Style.CUTS.lineup.price, Style.CUTS.lineup.drip], "lineup", game.money >= int(Style.CUTS.lineup.price)]])
+			_set_ui_mode(true)
+		"drip":
+			_drip_menu()
 		"club":
 			if game.minutes < 23 * 60:
 				show_toast("De Kraan opens at 23:00. The queue is already forming.")
+				return
+			if Style.drip(game) < Style.CLUB_MIN and int(game.stats.get("club_pass_day", -1)) != game.day:
+				_talk_npc = null
+				_talk_mode = "bouncer"
+				talk_ui.open("Mo Kraan, bouncer", "\"Not in those clothes, chef.\"  ·  drip %d/%d  ·  you have €%d" % [Style.drip(game), Style.CLUB_MIN, game.money], [
+					["Slip him a tenner  (€10)", "bribe", game.money >= 10],
+					["Fair enough. (get a fit at Drip Depot or a fade at Fresh Fades)", "leave"]])
+				_set_ui_mode(true)
 				return
 			var done_tonight: bool = int(game.stats.get("openmic_day", -1)) == game.day
 			_talk_npc = null
@@ -1500,6 +1531,26 @@ func _district_shop(id: String) -> void:
 				["Just dance for a bit (€10, chill: +1 take next session)", "dance", game.money >= 10],
 				["Pils at the bar (€4)", "pils", game.money >= 4]])
 			_set_ui_mode(true)
+
+
+## Drip Depot: buy a piece (it goes straight on) or swap what you wear. One piece per slot.
+func _drip_menu() -> void:
+	_talk_npc = null
+	_talk_mode = "drip"
+	var opts := []
+	for c in Style.CLOTHES:
+		var owned: bool = c.id in game.clothes
+		var worn: bool = game.outfit.get(c.slot, "") == c.id
+		var label := "%s  (+%d drip)" % [c.name, c.drip]
+		if worn:
+			label += "  · wearing (take off)"
+		elif owned:
+			label += "  · put on"
+		else:
+			label += "  · €%d" % c.price
+		opts.append([label, c.id, owned or game.money >= int(c.price)])
+	talk_ui.open("Drip Depot", "Your drip: %d  ·  club needs %d  ·  you have €%d" % [Style.drip(game), Style.CLUB_MIN, game.money], opts)
+	_set_ui_mode(true)
 
 
 ## Open mic: the crowd reacts to your best release and your level.
@@ -1522,7 +1573,7 @@ func _club(id: String) -> int:
 	if best == 0:
 		show_toast("You have nothing released yet. The crowd talks right over your set.")
 		return 0
-	var score := best * 18 + game.level() * 3 + randi() % 20 + Vitals.stage_bonus(game)
+	var score := best * 18 + game.level() * 3 + randi() % 20 + Vitals.stage_bonus(game) + Style.drip(game)
 	var rep := 0
 	var cred := 0
 	var tips := 0

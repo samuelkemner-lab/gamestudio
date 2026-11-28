@@ -53,6 +53,7 @@ var _lpf_idx := -1
 var _lpf: AudioEffectLowPassFilter
 var fishing: Fishing
 var trial: TimeTrial
+var arcade: ArcadeUI
 var _fish_line: MeshInstance3D  # chosen destination, waiting for "check in or not"
 const DISTRICT_ORIGINS := {"centraal": Vector3(0, 0, 1500), "markt": Vector3(0, 0, 2200), "haven": Vector3(0, 0, 2900)}
 const METRO_ORIGIN := Vector3(0, -80, 3600)
@@ -215,6 +216,7 @@ func _ready() -> void:
 	city_ui.visible = false
 	city_ui.closed.connect(func(): _set_ui_mode(false))
 	city_ui.message.connect(show_toast)
+	city_ui.arcade_requested.connect(play_arcade)
 	city_ui.upgrades_changed.connect(func(): room.apply_upgrades(game.upgrades))
 
 	var fade_layer := CanvasLayer.new()
@@ -231,6 +233,11 @@ func _ready() -> void:
 	talk_ui.visible = false
 	talk_ui.chosen.connect(_on_talk_chosen)
 	talk_ui.closed.connect(_end_talk)
+	arcade = ArcadeUI.new()
+	arcade.name = "Arcade"
+	layer.add_child(arcade)
+	arcade.finished.connect(_on_arcade_finished)
+	arcade.closed.connect(func(): _set_ui_mode(false))
 
 	results = ResultsUI.new()
 	layer.add_child(results)
@@ -357,7 +364,7 @@ func _prompt_for(target: Object) -> String:
 
 
 func _ui_open() -> bool:
-	return loopr.visible or phone.visible or results.visible or city_ui.visible or talk_ui.visible
+	return loopr.visible or phone.visible or results.visible or city_ui.visible or talk_ui.visible or (arcade != null and arcade.visible)
 
 
 func _input(event: InputEvent) -> void:
@@ -1567,6 +1574,28 @@ func _district_shop(id: String) -> void:
 				["Just dance for a bit (€10, chill: +1 take next session)", "dance", game.money >= 10],
 				["Pils at the bar (€4)", "pils", game.money >= 4]])
 			_set_ui_mode(true)
+
+
+## BEAT DROP in the snackbar: €1, then the cabinet takes over the screen.
+func play_arcade(seed_val := -1) -> void:
+	if not game.spend(1):
+		show_toast("You need €1 for the machine.")
+		return
+	city_ui.close()
+	_set_ui_mode(true)
+	arcade.open(seed_val)
+
+
+func _on_arcade_finished(final_score: int) -> void:
+	var r := ArcadeUI.result(game, final_score)
+	var line := "BEAT DROP: %d%s" % [final_score, "  ·  new high score!" if r.high else ""]
+	if not r.new_names.is_empty():
+		line += "  ·  you beat %s on the machine: +€%d" % [" & ".join(r.new_names), r.money]
+	if r.chill:
+		line += "  ·  warm fingers: +1 take with your next rapper"
+	show_toast(line)
+	if int(r.money) > 0:
+		_play_sfx(AmbienceSynth.cash())
 
 
 func _on_trial_started() -> void:

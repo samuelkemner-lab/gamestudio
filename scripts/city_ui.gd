@@ -5,6 +5,7 @@ extends Control
 signal closed
 signal message(text: String)
 signal upgrades_changed
+signal arcade_requested
 
 const MUSIC_DISCOUNT := 0.85
 const FISH_PRICE := 4  # cash price in the store vs. the online shop on your phone
@@ -235,6 +236,13 @@ func _menu(m: Dictionary) -> void:
 			sell_fish()
 			open(shop_id, game))
 		_row("Your catch (%d fish)" % n, "\"Uit de Maas? Ach, voor de kibbeling is het goed genoeg.\" Ome Kees pays €%d a fish." % FISH_PRICE, sell)
+	if shop_id == "snackbar":
+		var play := UIKit.button("PLAY  €1", Color("7a5cff"), 15)
+		play.custom_minimum_size.x = 120
+		play.disabled = game.money < 1
+		play.pressed.connect(func(): arcade_requested.emit())
+		var hi := int(game.records.get("arcade_high", 0))
+		_row("BEAT DROP  (arcade cabinet by the window)", "Four lanes, D F J K. Beat the names on the machine for prizes. Your high score: %s" % (str(hi) if hi > 0 else "--"), play)
 	var status := _status_text()
 	if status != "":
 		_col.add_child(UIKit.label(status, 14, UIKit.CYAN))

@@ -1038,6 +1038,33 @@ func _run() -> void:
 	key.call(KEY_ESCAPE)
 	check(not main.talk_ui.visible, "ESC closes a menu")
 	main._set_ui_mode(false)
+
+	# ---------- BEAT DROP arcade (snackbar) ----------
+	var ch := ArcadeUI.chart(7)
+	check(ch.size() > 50 and ArcadeUI.chart(7).size() == ch.size(), "BEAT DROP chart: %d notes, same seed = same chart (max %d)" % [ch.size(), ArcadeUI.max_score(ch)])
+	check(ArcadeUI.grade(0.03) == "perfect" and ArcadeUI.grade(-0.1) == "good" and ArcadeUI.grade(0.2) == "miss", "timing windows: perfect / good / miss")
+	gs.records = {}
+	gs.money = 10
+	main.open_shop("snackbar")
+	main.play_arcade(7)
+	var arc: ArcadeUI = main.arcade
+	check(arc.visible and arc.playing and gs.money == 9 and not main.city_ui.visible, "€1 in the slot: the cabinet takes over the screen")
+	# play it perfectly: step to each note and hit its lane
+	for n in arc.notes:
+		arc.t = float(n.t)
+		arc.hit(int(n.lane))
+	check(arc.counts.perfect == arc.notes.size() and arc.score == ArcadeUI.max_score(arc.notes), "all perfect: max score %d, combo ×4" % arc.score)
+	arc.t = 999.0
+	arc._process(0.016)
+	check(not arc.playing and int(gs.records.get("arcade_high", 0)) == arc.score and gs.money == 9 + 40, "game over: high score saved, beat KEES, DJ R and MO (+€40)")
+	var arc2 := ArcadeUI.result(gs, 60000)
+	check(int(arc2.money) == 0 and not arc2.chill, "machine prizes and warm fingers only once")
+	arc.open(3)
+	arc.t = float(arc.notes[0].t) + 0.5
+	arc._process(0.016)
+	check(arc.counts.miss >= 1 and arc.combo == 0, "let a note pass: miss, combo gone")
+	arc.quit()
+	check(not arc.visible, "ESC: walk away from the machine")
 	main._set_ui_mode(false)
 	main._talk_mode = ""
 
